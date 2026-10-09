@@ -1,0 +1,72 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0f17;
+  --panel: #131a26;
+  --panel-2: #1b2433;
+  --border: #263247;
+  --text: #e5e9f0;
+  --muted: #8b97ab;
+  --accent: #38bdf8;
+  --danger: #f87171;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg); }
+
+button {
+  font: inherit;
+  background: var(--accent);
+  color: #04121c;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.6rem 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.6; cursor: default; }
+button.ghost { background: transparent; color: var(--text); border: 1px solid var(--border); font-weight: 500; padding: 0.35rem 0.75rem; }
+
+input {
+  font: inherit;
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.6rem 0.7rem;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.muted { color: var(--muted); }
+.error { color: var(--danger); font-size: 0.9rem; }
+.center { min-height: 100%; display: grid; place-items: center; padding: 1rem; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
+
+.login { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 0.9rem; }
+.login h1 { display: flex; align-items: center; gap: 0.6rem; font-size: 1.35rem; margin: 0; }
+.login p { margin: 0; }
+.login label { font-size: 0.9rem; }
+
+.shell { height: 100%; display: flex; flex-direction: column; }
+.topbar { display: flex; align-items: center; gap: 1.5rem; padding: 0.6rem 1rem; background: var(--panel); border-bottom: 1px solid var(--border); }
+.brand { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
+.topbar nav { display: flex; gap: 0.25rem; flex: 1; }
+.topbar nav a { color: var(--muted); text-decoration: none; padding: 0.35rem 0.75rem; border-radius: 6px; }
+.topbar nav a.active { color: var(--text); background: var(--panel-2); }
+.user { display: flex; align-items: center; gap: 0.75rem; }
+main { flex: 1; min-height: 0; }
+
+.page { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1rem; }
+
+.grid-2x2 { height: 100%; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; background: #000; padding: 4px; }
+.tile { background: #05070b; border: 1px solid var(--border); border-radius: 4px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem; }
+
+@media (max-width: 640px) {
+  .topbar { flex-wrap: wrap; gap: 0.75rem; }
+  .user .muted { display: none; }
+}
