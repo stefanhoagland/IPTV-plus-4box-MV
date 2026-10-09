@@ -8,6 +8,7 @@ const app = await buildApp(config, db);
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.once(signal, async () => {
+    app.sources.stopScheduler();
     await app.close();
     db.close();
     process.exit(0);
@@ -15,3 +16,4 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 }
 
 await app.listen({ port: config.port, host: config.host });
+app.sources.startScheduler();

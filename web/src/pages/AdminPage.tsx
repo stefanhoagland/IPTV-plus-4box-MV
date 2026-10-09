@@ -1,11 +1,19 @@
+import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
+import SourcesPanel from '../admin/SourcesPanel';
+import ChannelsPanel from '../admin/ChannelsPanel';
+
 export default function AdminPage() {
   return (
     <div className="page">
-      <h2>Admin</h2>
-      <div className="card">
-        <p>Playlists and channel management arrive in step 2.</p>
-        <p className="muted">You'll be able to add M3U / Xtream sources here, then choose which channels show up in the multiview picker.</p>
+      <div className="tabs">
+        <NavLink to="/admin/sources">Sources</NavLink>
+        <NavLink to="/admin/channels">Channels</NavLink>
       </div>
+      <Routes>
+        <Route path="sources" element={<SourcesPanel />} />
+        <Route path="channels" element={<ChannelsPanel />} />
+        <Route path="*" element={<Navigate to="sources" replace />} />
+      </Routes>
     </div>
   );
 }
