@@ -58,6 +58,12 @@ test('compat mode turns an MPEG-2 + AC-3 channel into H.264 + AAC', { skip: !has
     const streams = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_name', '-of', 'json', out]).toString()).streams.map((s: { codec_name: string }) => s.codec_name);
     assert.deepEqual(streams.sort(), ['aac', 'h264']);
 
+    const diag = (await call('GET', `/api/play/${food.id}/diagnostics`)).json();
+    assert.equal(diag.channel.name, 'Food Network');
+    assert.match(diag.channel.url, /^http:\/\/127\.0\.0\.1:\d+\/…\/cable\.ts$/);
+    assert.ok(diag.events.some((e: string) => e.includes('ffprobe') && e.includes('mpeg2video')), diag.events.join('\n'));
+    assert.ok(diag.events.some((e: string) => e.includes('ffmpeg sending video')), diag.events.join('\n'));
+
     assert.equal((await call('GET', `/api/play/${local.id}/compat`)).statusCode, 400, 'non-http URLs are refused');
   } finally {
     server.close();

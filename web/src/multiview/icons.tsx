@@ -39,3 +39,10 @@ export const FixPicture = () => (
     <path d="M8 21h8M9 11l2 2 4-4" />
   </svg>
 );
+
+export const Info = () => (
+  <svg {...base} aria-hidden="true">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 16v-4M12 8h.01" />
+  </svg>
+);

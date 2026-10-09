@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { Db } from './db.js';
 import { DEFAULT_USER_AGENT } from './sources.js';
+import { Diagnostics, describePlaylist, redactUrl } from './diagnostics.js';
 
 /**
  * Same-origin stream proxy for the multiview player.
@@ -45,6 +46,7 @@ export class StreamProxy {
   constructor(
     private db: Db,
     private fetchFn: typeof fetch = fetch,
+    readonly diag = new Diagnostics(),
   ) {}
 
   sign(channelId: number, url: string): string {
@@ -61,14 +63,16 @@ export class StreamProxy {
     return `/api/play/${channelId}/r?u=${Buffer.from(url).toString('base64url')}&s=${this.sign(channelId, url)}`;
   }
 
-  channel(id: number): { url: string; userAgent: string } | null {
+  channel(id: number): { url: string; userAgent: string; name: string; source: string } | null {
     const row = this.db
-      .prepare('SELECT c.stream_url, s.user_agent FROM channels c JOIN sources s ON s.id = c.source_id WHERE c.id = ?')
-      .get(id) as { stream_url: string; user_agent: string | null } | undefined;
-    return row ? { url: row.stream_url, userAgent: row.user_agent || DEFAULT_USER_AGENT } : null;
+      .prepare(
+        'SELECT c.stream_url, COALESCE(c.custom_name, c.name) AS name, s.name AS source, s.user_agent FROM channels c JOIN sources s ON s.id = c.source_id WHERE c.id = ?',
+      )
+      .get(id) as { stream_url: string; name: string; source: string; user_agent: string | null } | undefined;
+    return row ? { url: row.stream_url, userAgent: row.user_agent || DEFAULT_USER_AGENT, name: row.name, source: row.source } : null;
   }
 
-  async proxy(req: FastifyRequest, reply: FastifyReply, channelId: number, url: string, userAgent: string, opts: { expectPlaylist?: boolean } = {}) {
+  async proxy(req: FastifyRequest, reply: FastifyReply, channelId: number, url: string, userAgent: string, opts: { expectPlaylist?: boolean; logPlaylist?: boolean } = {}) {
     const abort = new AbortController();
     // Stop pulling from the provider as soon as the player goes away (channel change, tab closed).
     reply.raw.on('close', () => abort.abort());
@@ -77,18 +81,22 @@ export class StreamProxy {
     const headers: Record<string, string> = { 'User-Agent': userAgent };
     if (req.headers.range) headers.Range = req.headers.range;
 
+    const note = (msg: string) => this.diag.note(channelId, `${redactUrl(url)}: ${msg}`);
     let upstream: Response;
     try {
       upstream = await this.fetchFn(url, { headers, signal: abort.signal, redirect: 'follow' });
     } catch (err) {
       clearTimeout(timeout);
       if (abort.signal.aborted && reply.raw.destroyed) return reply.hijack();
+      const cause = (err as Error & { cause?: Error }).cause?.message;
+      note(`could not connect: ${(err as Error).message}${cause ? ` (${cause})` : ''}`);
       return reply.code(502).send({ error: `Could not reach the stream: ${(err as Error).message}` });
     }
 
     if (!upstream.ok && upstream.status !== 206) {
       clearTimeout(timeout);
       void upstream.body?.cancel();
+      note(`provider answered HTTP ${upstream.status}`);
       return reply.code(502).send({ error: `Stream server returned HTTP ${upstream.status}` });
     }
 
@@ -106,6 +114,7 @@ export class StreamProxy {
     } catch (err) {
       clearTimeout(timeout);
       if (reply.raw.destroyed) return reply.hijack();
+      note(`stream stopped: ${(err as Error).message}`);
       return reply.code(502).send({ error: `Stream stopped: ${(err as Error).message}` });
     }
     const head = first ? Buffer.from(first.subarray(0, 32)).toString('utf8').replace(/^\uFEFF/, '').trimStart() : '';
@@ -122,6 +131,7 @@ export class StreamProxy {
         clearTimeout(timeout);
       }
       const text = Buffer.concat(chunks).toString('utf8');
+      if (opts.logPlaylist) note(describePlaylist(text));
       return reply
         .header('content-type', 'application/vnd.apple.mpegurl')
         .header('cache-control', 'no-cache')
@@ -130,6 +140,7 @@ export class StreamProxy {
 
     clearTimeout(timeout);
     if (opts.expectPlaylist) {
+      note(`raw stream (${upstream.headers.get('content-type') ?? 'no content type'}), switching to the MPEG-TS player`);
       // The HLS player asked, but this is a raw stream (usually continuous MPEG-TS): tell it to switch players.
       void reader.cancel();
       return reply.code(415).send({ error: 'Not an HLS playlist' });
@@ -165,7 +176,7 @@ export async function streamRoutes(app: FastifyInstance, opts: { proxy: StreamPr
     const ch = Number.isInteger(id) ? proxy.channel(id) : null;
     if (!ch) return reply.code(404).send({ error: 'Channel not found' });
     const { as } = req.query as { as?: string };
-    return proxy.proxy(req, reply, id, ch.url, ch.userAgent, { expectPlaylist: as === 'hls' });
+    return proxy.proxy(req, reply, id, ch.url, ch.userAgent, { expectPlaylist: as === 'hls', logPlaylist: true });
   });
 
   app.get('/api/play/:id/r', async (req, reply) => {
@@ -176,6 +187,8 @@ export async function streamRoutes(app: FastifyInstance, opts: { proxy: StreamPr
     if (!proxy.verify(id, url, s)) return reply.code(403).send({ error: 'Invalid link' });
     const ch = proxy.channel(id);
     if (!ch) return reply.code(404).send({ error: 'Channel not found' });
-    return proxy.proxy(req, reply, id, url, ch.userAgent);
+    // Log variant playlists once in a while, not every live refresh.
+    const isVariant = /\.m3u8?($|\?)/i.test(url) && !proxy.diag.get(id).some((e) => e.includes(redactUrl(url)));
+    return proxy.proxy(req, reply, id, url, ch.userAgent, { logPlaylist: isVariant });
   });
 }
