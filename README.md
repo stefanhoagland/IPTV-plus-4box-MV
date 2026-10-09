@@ -53,6 +53,8 @@ On the **Multiview** page, click any box to choose its channel (search, or filte
 
 Your four boxes and their audio settings are remembered. All playback goes through the server (`/api/play/…`), so provider credentials never reach the browser and streams work even without CORS headers. HLS (`.m3u8`) plays everywhere; raw MPEG-TS streams play in Chrome, Edge and Firefox.
 
+Some channels use formats browsers can't decode, typically Dolby (AC-3/E-AC-3) audio or MPEG-2/HEVC video, which shows up as a black box. The player detects this (codec errors, sound but no picture, or nothing starting) and switches that box to a **converted** stream: the server runs it through ffmpeg, copying H.264 video when it can and re-encoding otherwise, with stereo AAC audio. Converted boxes show a small *Converted* label, and the app remembers which channels need it. Re-encoding video uses CPU on the server (roughly one core per channel at 720p).
+
 ## Live NFL preset
 
 On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public schedule) with the channel each one is on in *your* list:

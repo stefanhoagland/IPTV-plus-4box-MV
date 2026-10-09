@@ -8,6 +8,10 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 FROM public.ecr.aws/docker/library/node:22-bookworm-slim
+# ffmpeg converts channels the browser can't decode (Dolby audio, MPEG-2/HEVC video).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     PORT=9292 \
     DATA_DIR=/config \
