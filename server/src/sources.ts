@@ -145,6 +145,17 @@ export class SourceService {
     for (const { id } of due) await this.refresh(id);
   }
 
+  /** Refresh enabled linked sources not refreshed within `maxAgeHours` (e.g. before matching game-day event channels). */
+  async refreshStale(maxAgeHours: number): Promise<void> {
+    const stale = this.db
+      .prepare(
+        `SELECT id FROM sources WHERE enabled = 1 AND type != 'm3u_file'
+         AND (last_refreshed_at IS NULL OR datetime(last_refreshed_at, '+' || ? || ' hours') <= datetime('now'))`,
+      )
+      .all(maxAgeHours) as { id: number }[];
+    await Promise.all(stale.map(({ id }) => this.refresh(id)));
+  }
+
   startScheduler(intervalMs = 5 * 60 * 1000): void {
     const tick = () => void this.refreshDue().catch((err) => this.log.error(err));
     tick();
