@@ -27,7 +27,7 @@ Copy [`docker/unraid-template.xml`](docker/unraid-template.xml) to `/boot/config
 
 Open `http://<server-ip>:9292` and create your admin account on first visit.
 
-The image is published to `ghcr.io/stefanhoagland/iptv-plus-4box-mv:latest` on every push to `main` (amd64 and arm64). If the repository is private, either make the package public under GitHub → Packages, or build locally with `docker compose build`.
+The image is published to `ghcr.io/stefanhoagland/iptv-plus-4box-mv:latest` on every push to `main` (amd64). If the repository is private, either make the package public under GitHub → Packages, or build locally with `docker compose build`.
 
 ## Configuration
 
