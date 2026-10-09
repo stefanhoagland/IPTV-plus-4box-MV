@@ -3,7 +3,7 @@ import { api, type Channel } from '../api';
 import Player from '../multiview/Player';
 import ChannelPicker from '../multiview/ChannelPicker';
 import NflPreset from '../multiview/NflPreset';
-import { Close, FixPicture, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
+import { Close, FixPicture, Info, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
 
 interface Tile {
   channelId: number | null;
@@ -19,6 +19,7 @@ export default function MultiviewPage() {
   const [nfl, setNfl] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixRequests, setFixRequests] = useState([0, 0, 0, 0]);
+  const [detailsRequests, setDetailsRequests] = useState([0, 0, 0, 0]);
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -91,7 +92,7 @@ export default function MultiviewPage() {
           >
             {t.channelId !== null && t.channel ? (
               <>
-                <Player channelId={t.channelId} muted={t.muted} fixRequest={fixRequests[i]} />
+                <Player channelId={t.channelId} muted={t.muted} fixRequest={fixRequests[i]} detailsRequest={detailsRequests[i]} />
                 <div className="tile-bar" onClick={(e) => e.stopPropagation()}>
                   <div className="tile-title">
                     <span className="box-num">{i + 1}</span>
@@ -115,6 +116,14 @@ export default function MultiviewPage() {
                       title="Black picture? Have the server convert this channel (click again to undo)"
                     >
                       <FixPicture />
+                    </button>
+                    <button
+                      className="tile-btn"
+                      onClick={() => setDetailsRequests((f) => f.map((n, j) => (j === i ? n + 1 : n)))}
+                      aria-label={`Details for box ${i + 1}`}
+                      title="Details: what the player and server saw, to copy when reporting a problem"
+                    >
+                      <Info />
                     </button>
                     <button className="tile-btn" onClick={() => fullscreen(i)} aria-label={`Fullscreen box ${i + 1}`} title="Fullscreen">
                       <Fullscreen />

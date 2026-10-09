@@ -95,9 +95,11 @@ button.small-btn { padding: 0.2rem 0.6rem; font-size: 0.85rem; }
 .badge { font-size: 0.75rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--border); color: var(--muted); }
 
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; padding: 1rem; z-index: 50; }
-.modal { width: 100%; max-width: 520px; max-height: calc(100vh - 2rem); overflow: auto; }
+.modal { width: 100%; max-width: 520px; cursor: auto; max-height: calc(100vh - 2rem); overflow: auto; }
 .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
 .modal-head h3 { margin: 0; }
+.details-text { width: 100%; height: 50vh; font: 0.75rem/1.4 ui-monospace, monospace; white-space: pre; resize: vertical; }
+.modal-actions { display: flex; justify-content: flex-end; margin-top: 0.75rem; }
 .form { display: flex; flex-direction: column; gap: 0.9rem; }
 .form label { font-size: 0.9rem; flex: 1; }
 .form p { margin: 0; }

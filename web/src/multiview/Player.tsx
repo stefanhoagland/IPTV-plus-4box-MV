@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
+import Modal from '../components/Modal';
 import type Mpegts from 'mpegts.js';
 
 type Status = { kind: 'loading' } | { kind: 'playing' } | { kind: 'error'; message: string };
@@ -57,7 +58,38 @@ async function describeStream(channelId: number): Promise<string | null> {
  * up to compat and then reencode mode, where the server converts the stream with ffmpeg.
  * `fixRequest` changes when the viewer presses "Fix picture": it toggles forced re-encoding.
  */
-export default function Player({ channelId, muted, fixRequest = 0 }: { channelId: number; muted: boolean; fixRequest?: number }) {
+/** Player events kept for the Details panel, so a viewer can copy what happened. */
+function useEventLog() {
+  const log = useRef<string[]>([]);
+  const t0 = useRef(performance.now());
+  const say = (msg: string) => {
+    log.current.push(`+${((performance.now() - t0.current) / 1000).toFixed(1)}s ${msg}`);
+    if (log.current.length > 120) log.current.splice(0, log.current.length - 120);
+  };
+  return { log, say };
+}
+
+const CODEC_CHECKS = {
+  'H.264': 'video/mp4; codecs="avc1.64001f"',
+  HEVC: 'video/mp4; codecs="hvc1.1.6.L93.B0"',
+  AAC: 'audio/mp4; codecs="mp4a.40.2"',
+  'AC-3': 'audio/mp4; codecs="ac-3"',
+  'E-AC-3': 'audio/mp4; codecs="ec-3"',
+};
+
+export default function Player({
+  channelId,
+  muted,
+  fixRequest = 0,
+  detailsRequest = 0,
+}: {
+  channelId: number;
+  muted: boolean;
+  fixRequest?: number;
+  detailsRequest?: number;
+}) {
+  const { log, say } = useEventLog();
+  const [details, setDetails] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
   const [mode, setMode] = useState<Mode>(() => rememberedMode(channelId));
@@ -71,6 +103,7 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
     if (fixRequest === lastFix.current) return;
     lastFix.current = fixRequest;
     const next: Mode = mode === 'reencode' ? 'direct' : 'reencode';
+    say(`Fix picture pressed: ${next}`);
     rememberMode(channelId, next);
     setMode(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -102,6 +135,7 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
       if (disposed) return true;
       const next = NEXT_MODE[mode];
       if (!next) return false;
+      say(`switching to ${next}`);
       disposed = true;
       rememberMode(channelId, next);
       setMode(next);
@@ -109,6 +143,7 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
     };
 
     const showError = (message: string) => {
+      say(`error shown: ${message}`);
       clearTimers();
       setStatus({ kind: 'error', message });
       void describeStream(channelId).then((d) => d && !disposed && setStatus({ kind: 'error', message: `${message} (${d})` }));
@@ -117,6 +152,7 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
     /** `convertible`: false for problems conversion can't fix (channel offline or gone). */
     const fail = (message: string, convertible = true) => {
       if (disposed) return;
+      say(`failed: ${message}`);
       if (autoRetries < MAX_AUTO_RETRIES) {
         autoRetries++;
         clearTimers();
@@ -153,12 +189,14 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
     let checking = false;
     const checkPicture = (since: number) => {
       if (video.paused || hasPicture()) return void (checking = false);
-      if (!onScreen() || video.currentTime - since < 1) return later(() => checkPicture(since), FRAME_CHECK_MS);
+      if (!onScreen()) return later(() => checkPicture(since), FRAME_CHECK_MS);
       checking = false;
+      say(`no picture after ${FRAME_CHECK_MS / 1000}s (time ${since.toFixed(1)} -> ${video.currentTime.toFixed(1)}, size ${video.videoWidth}x${video.videoHeight})`);
       undecodable('No picture in this stream');
     };
     const onPlaying = () => {
       if (disposed) return;
+      say(`playing (${video.videoWidth}x${video.videoHeight})`);
       autoRetries = 0;
       if (startTimer) clearTimeout(startTimer);
       setStatus({ kind: 'playing' });
@@ -167,13 +205,18 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
       const since = video.currentTime;
       later(() => checkPicture(since), FRAME_CHECK_MS);
     };
-    const onWaiting = () => !disposed && setStatus((s) => (s.kind === 'error' ? s : { kind: 'loading' }));
+    const onWaiting = () => {
+      if (disposed) return;
+      say('buffering');
+      setStatus((s) => (s.kind === 'error' ? s : { kind: 'loading' }));
+    };
     video.addEventListener('playing', onPlaying);
     video.addEventListener('waiting', onWaiting);
 
     const play = () =>
       void video.play().catch((err: DOMException) => {
         // Chrome won't start a video with sound until the page has been clicked: start it muted instead.
+        if (!disposed) say(`play() refused: ${err.name}`);
         if (disposed || err.name !== 'NotAllowedError' || video.muted) return;
         video.muted = true;
         setSoundBlocked(true);
@@ -185,7 +228,16 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
       if (disposed) return;
       if (!mpegts.isSupported()) return fail('This browser cannot play this stream');
       ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
-      ts.on(mpegts.Events.ERROR, (type: string, detail: string) => {
+      say(`MPEG-TS player loading ${url}`);
+      ts.on(mpegts.Events.MEDIA_INFO, (info: { mimeType?: string; videoCodec?: string; audioCodec?: string; width?: number; height?: number }) => {
+        say(`stream info: video ${info.videoCodec ?? 'none'} ${info.width ?? '?'}x${info.height ?? '?'}, audio ${info.audioCodec ?? 'none'}`);
+        // Dolby audio or HEVC video the browser can't decode: convert now instead of sitting on a black box.
+        const codecs = /codecs="([^"]+)"/.exec(info.mimeType ?? '')?.[1].split(',').map((c) => c.trim()) ?? [];
+        const unsupported = codecs.filter((c) => typeof MediaSource !== 'undefined' && !MediaSource.isTypeSupported(`video/mp4; codecs="${c}"`));
+        if (unsupported.length) undecodable(`This browser can't decode ${unsupported.join(', ')}`);
+      });
+      ts.on(mpegts.Events.ERROR, (type: string, detail: string, info?: { msg?: string }) => {
+        say(`MPEG-TS error: ${type} ${detail}${info?.msg ? ` (${info.msg})` : ''}`);
         if (type === mpegts.ErrorTypes.MEDIA_ERROR) return undecodable(`This stream can't be decoded (${detail})`);
         fail(mode === 'direct' ? `Stream error (${detail})` : 'Could not convert this stream');
       });
@@ -201,14 +253,21 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
       ts = null;
       setStatus({ kind: 'loading' });
       if (startTimer) clearTimeout(startTimer);
-      startTimer = setTimeout(() => !disposed && video.readyState < 3 && fail('Stream did not start'), START_TIMEOUT_MS);
+      say(`starting (${mode})`);
+      // Conversion needs time to connect, analyse and encode before the first picture.
+      const timeout = mode === 'direct' ? START_TIMEOUT_MS : START_TIMEOUT_MS * 2;
+      startTimer = setTimeout(() => !disposed && video.readyState < 3 && fail('Stream did not start'), timeout);
       timers.add(startTimer);
 
       if (mode !== 'direct') return void startMpegts(`${src}/compat${mode === 'reencode' ? '?reencode=1' : ''}`);
 
       if (Hls.isSupported()) {
         hls = new Hls({ lowLatencyMode: false, liveSyncDurationCount: 3, manifestLoadingMaxRetry: 0, levelLoadingMaxRetry: 4, fragLoadingMaxRetry: 4 });
+        hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) =>
+          say(`HLS playlist: ${data.levels.map((l) => [l.width && `${l.width}x${l.height}`, l.videoCodec, l.audioCodec].filter(Boolean).join(' ') || 'level').join('; ')}`),
+        );
         hls.on(Hls.Events.ERROR, (_e, data) => {
+          say(`HLS ${data.fatal ? 'fatal ' : ''}error: ${data.details}${data.response?.code ? ` (HTTP ${data.response.code})` : ''}`);
           const codecProblem =
             data.details === Hls.ErrorDetails.MANIFEST_INCOMPATIBLE_CODECS_ERROR ||
             data.details === Hls.ErrorDetails.BUFFER_ADD_CODEC_ERROR ||
@@ -259,6 +318,35 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, attempt, mode]);
 
+  const lastDetails = useRef(detailsRequest);
+  useEffect(() => {
+    if (detailsRequest === lastDetails.current) return;
+    lastDetails.current = detailsRequest;
+    const v = videoRef.current!;
+    const q = v.getVideoPlaybackQuality?.();
+    const mse = typeof MediaSource !== 'undefined';
+    const lines = [
+      `Channel ${channelId}, mode ${mode}, status ${status.kind === 'error' ? `error: ${status.message}` : status.kind}`,
+      `Video: ${v.videoWidth}x${v.videoHeight}, time ${v.currentTime.toFixed(1)}, paused ${v.paused}, muted ${v.muted}, readyState ${v.readyState}, networkState ${v.networkState}${v.error ? `, error ${v.error.code} ${v.error.message}` : ''}`,
+      `Frames: ${q ? `${q.totalVideoFrames} decoded, ${q.droppedVideoFrames} dropped` : 'unknown'}`,
+      `Browser can decode: ${Object.entries(CODEC_CHECKS).map(([name, type]) => `${name} ${mse && MediaSource.isTypeSupported(type) ? 'yes' : 'no'}`).join(', ')}`,
+      `Browser: ${navigator.userAgent}`,
+      '',
+      'Player events:',
+      ...log.current,
+    ];
+    setDetails(lines.join('\n') + '\n\nServer events:\n(loading…)');
+    void fetch(`/api/play/${channelId}/diagnostics`)
+      .then((r) => r.json())
+      .then((d: { channel?: { name: string; source: string; url: string }; events?: string[]; error?: string }) =>
+        setDetails(
+          [...lines, '', 'Server events:', d.channel ? `${d.channel.name} from ${d.channel.source}, ${d.channel.url}` : (d.error ?? ''), ...(d.events ?? [])].join('\n'),
+        ),
+      )
+      .catch((e: Error) => setDetails([...lines, '', `Server events: could not load (${e.message})`].join('\n')));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detailsRequest]);
+
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
     if (muted) setSoundBlocked(false);
@@ -266,6 +354,27 @@ export default function Player({ channelId, muted, fixRequest = 0 }: { channelId
 
   return (
     <>
+      {details !== null && (
+        <div onClick={(e) => e.stopPropagation()}>
+          <Modal title="Box details" onClose={() => setDetails(null)}>
+            <p className="muted">Copy this and send it to whoever is helping you fix this channel.</p>
+            <textarea className="details-text" readOnly value={details} onFocus={(e) => e.currentTarget.select()} />
+            <div className="modal-actions">
+              <button
+                onClick={(e) => {
+                  const area = e.currentTarget.parentElement!.previousElementSibling as HTMLTextAreaElement;
+                  area.select();
+                  if (navigator.clipboard) void navigator.clipboard.writeText(details);
+                  else document.execCommand('copy');
+                  e.currentTarget.textContent = 'Copied';
+                }}
+              >
+                Copy
+              </button>
+            </div>
+          </Modal>
+        </div>
+      )}
       <video ref={videoRef} className="player-video" muted={muted} playsInline autoPlay />
       {mode !== 'direct' && status.kind === 'playing' && (
         <span className="compat-badge" title="Your browser can't play this channel's format directly, so the server is converting it">

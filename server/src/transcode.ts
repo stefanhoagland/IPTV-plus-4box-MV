@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { redactUrl } from './diagnostics.js';
 import type { StreamProxy } from './stream.js';
 
 /**
@@ -47,6 +48,8 @@ export function ffmpegArgs(url: string, userAgent: string, probe: ProbeResult | 
   ];
 }
 
+const secs = (since: number) => `${((Date.now() - since) / 1000).toFixed(1)}s`;
+
 function run(cmd: string, args: string[], timeoutMs: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -81,9 +84,12 @@ export class Transcoder {
     if (cached && Date.now() - cached.at < PROBE_CACHE_MS) return cached.result;
     const ch = this.channel(channelId);
     const http = ['-user_agent', ch.userAgent];
-    const json = JSON.parse(
-      await run(this.ffprobe, ['-v', 'error', ...http, '-protocol_whitelist', 'http,https,tcp,tls,crypto,hls', '-analyzeduration', '5000000', '-probesize', '5000000', '-show_entries', 'stream=codec_type,codec_name,width,height,channels,profile,pix_fmt', '-of', 'json', ch.url], 20_000),
-    ) as { streams?: { codec_type: string; codec_name: string; width?: number; height?: number; channels?: number; profile?: string; pix_fmt?: string }[] };
+    const started = Date.now();
+    const output = await run(this.ffprobe, ['-v', 'error', ...http, '-protocol_whitelist', 'http,https,tcp,tls,crypto,hls', '-analyzeduration', '5000000', '-probesize', '5000000', '-show_entries', 'stream=codec_type,codec_name,width,height,channels,profile,pix_fmt', '-of', 'json', ch.url], 20_000).catch((err: Error) => {
+      this.proxy.diag.note(channelId, `ffprobe failed after ${secs(started)}: ${err.message}`);
+      throw err;
+    });
+    const json = JSON.parse(output) as { streams?: { codec_type: string; codec_name: string; width?: number; height?: number; channels?: number; profile?: string; pix_fmt?: string }[] };
     const streams = json.streams ?? [];
     const v = streams.find((s) => s.codec_type === 'video');
     const a = streams.find((s) => s.codec_type === 'audio');
@@ -92,7 +98,20 @@ export class Transcoder {
       audio: a ? { codec: a.codec_name, channels: a.channels } : null,
     };
     this.probes.set(channelId, { at: Date.now(), result });
+    const v2 = result.video;
+    this.proxy.diag.note(
+      channelId,
+      `ffprobe (${secs(started)}): video ${v2 ? [v2.codec, v2.profile, v2.pixFmt, v2.width && `${v2.width}x${v2.height}`].filter(Boolean).join(' ') : 'none'}, audio ${result.audio ? `${result.audio.codec} ${result.audio.channels ?? '?'}ch` : 'none'}`,
+    );
     return result;
+  }
+
+  proxyChannel(channelId: number) {
+    return this.proxy.channel(channelId);
+  }
+
+  events(channelId: number) {
+    return this.proxy.diag.get(channelId);
   }
 
   /** Only http(s): ffmpeg would happily open file:// or other protocols named in a provider's playlist. */
@@ -111,11 +130,27 @@ export class Transcoder {
       const e = err as Error & { statusCode?: number };
       return reply.code(e.statusCode ?? 500).send({ error: e.message });
     }
+    const note = (msg: string) => {
+      this.proxy.diag.note(channelId, msg);
+      req.log.info(`channel ${channelId}: ${msg}`);
+    };
+    const started = Date.now();
+    // Forced re-encoding needs no probe, which saves a provider connection and several seconds.
     // Without a probe, re-encode video to be safe; a probe failure shouldn't block playback.
-    const probe = await this.probe(channelId).catch(() => null);
-    const child = spawn(this.ffmpeg, ffmpegArgs(ch.url, ch.userAgent, probe, reencode), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const probe = reencode ? null : await this.probe(channelId).catch(() => null);
+    const args = ffmpegArgs(ch.url, ch.userAgent, probe, reencode);
+    note(`ffmpeg starting (${args[args.indexOf('-c:v') + 1] === 'copy' ? 'copy video' : 're-encode video'}, AAC audio)`);
+    const child = spawn(this.ffmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
-    child.stderr.on('data', (d) => (stderr = (stderr + d).slice(-2000)));
+    child.stderr.on('data', (d) => {
+      stderr = (stderr + d).slice(-2000);
+      for (const line of String(d).split('\n').filter((l) => l.trim()).slice(0, 5)) note(`ffmpeg: ${line.trim().slice(0, 300)}`);
+    });
+    let bytes = 0;
+    child.stdout.on('data', (d: Buffer) => {
+      if (bytes === 0) note(`ffmpeg sending video after ${secs(started)}`);
+      bytes += d.length;
+    });
     const spawned = await new Promise<Error | null>((resolve) => {
       child.once('spawn', () => resolve(null));
       child.once('error', (e) => resolve(e));
@@ -124,7 +159,8 @@ export class Transcoder {
       const missing = (spawned as NodeJS.ErrnoException).code === 'ENOENT';
       return reply.code(missing ? 501 : 500).send({ error: missing ? 'ffmpeg is not installed on the server' : spawned.message });
     }
-    child.on('close', (code) => {
+    child.on('close', (code, signal) => {
+      note(`ffmpeg stopped after ${secs(started)} (${signal ?? `exit ${code}`}), sent ${(bytes / 1e6).toFixed(1)} MB`);
       if (code && code !== 255 && stderr) req.log.warn(`ffmpeg for channel ${channelId} exited ${code}: ${stderr.trim().split('\n').pop()}`);
     });
     // Stop ffmpeg (and the provider connection) as soon as the viewer goes away.
@@ -145,6 +181,14 @@ export async function transcodeRoutes(app: FastifyInstance, opts: { transcoder: 
       const e = err as Error & { statusCode?: number };
       return reply.code(e.statusCode ?? 502).send({ error: `Could not inspect the stream: ${e.message}` });
     }
+  });
+
+  /** What happened recently with this channel, for the box's Details panel. */
+  app.get('/api/play/:id/diagnostics', async (req, reply) => {
+    const id = channelId(req);
+    const ch = transcoder.proxyChannel(id);
+    if (!ch) return reply.code(404).send({ error: 'Channel not found' });
+    return { channel: { id, name: ch.name, source: ch.source, url: redactUrl(ch.url), userAgent: ch.userAgent }, events: transcoder.events(id) };
   });
 
   app.get('/api/play/:id/compat', async (req, reply) => {
