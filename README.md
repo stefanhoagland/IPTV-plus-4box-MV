@@ -8,10 +8,14 @@ Runs as a single Docker container, built for Unraid.
 | --- | --- |
 | ![Setup](docs/screenshots/setup.png) | ![Multiview](docs/screenshots/multiview.png) |
 
+| Admin: sources | Admin: channels |
+| --- | --- |
+| ![Sources](docs/screenshots/sources.png) | ![Channels](docs/screenshots/channels.png) |
+
 ## Roadmap
 
 1. **Foundation**: app shell, login, SQLite storage, Docker/Unraid packaging ✅
-2. **Admin**: add M3U / Xtream sources, import and manage channels
+2. **Admin**: add M3U / Xtream sources, import and manage channels ✅
 3. **Multiview**: 2x2 HLS player, click a box to pick its channel, per-box audio toggle, fullscreen
 4. **Polish**: EPG / now playing, favorites, more layouts
 
@@ -28,6 +32,18 @@ Copy [`docker/unraid-template.xml`](docker/unraid-template.xml) to `/boot/config
 Open `http://<server-ip>:9292` and create your admin account on first visit.
 
 The image is published to `ghcr.io/stefanhoagland/iptv-plus-4box-mv:latest` on every push to `main` (amd64). If the repository is private, either make the package public under GitHub → Packages, or build locally with `docker compose build`.
+
+## Adding channels
+
+In **Admin → Sources**, add one or more sources:
+
+- **M3U link**: the playlist URL from your provider (often `get.php?…&type=m3u_plus`).
+- **Upload M3U**: a playlist file from your computer.
+- **Xtream login**: server URL, username and password. Streams are played as HLS (`.m3u8`).
+
+Linked sources refresh automatically (every 24 hours by default; change it under *Advanced*). Some providers only answer known players, so the default user agent is VLC's; you can change that under *Advanced* too.
+
+In **Admin → Channels**, hide what you don't watch (one at a time, or a whole group with *Hide all*), give favourites a number to put them first, and rename or re-logo channels. Your edits are kept when a source refreshes. Only visible channels will appear in the multiview picker.
 
 ## Configuration
 

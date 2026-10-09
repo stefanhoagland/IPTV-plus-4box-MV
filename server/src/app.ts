@@ -5,10 +5,16 @@ import fastifyStatic from '@fastify/static';
 import type { Config } from './config.js';
 import type { Db } from './db.js';
 import { AuthService, SESSION_TTL_MS, validateCredentials, type User } from './auth.js';
+import { SourceService } from './sources.js';
+import { ChannelService } from './channels.js';
+import { adminRoutes } from './routes/admin.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
     user: User | null;
+  }
+  interface FastifyInstance {
+    sources: SourceService;
   }
 }
 
@@ -19,7 +25,11 @@ const PUBLIC_API = new Set(['/api/health', '/api/auth/status', '/api/auth/login'
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 
-export async function buildApp(config: Config, db: Db) {
+export interface AppDeps {
+  fetch?: typeof fetch;
+}
+
+export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   const app = Fastify({ logger: { level: config.logLevel }, trustProxy: true });
   const auth = new AuthService(db);
   const loginFailures = new Map<string, { count: number; since: number }>();
@@ -94,6 +104,11 @@ export async function buildApp(config: Config, db: Db) {
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
   });
+
+  const sources = new SourceService(db, app.log, deps.fetch);
+  const channels = new ChannelService(db);
+  app.decorate('sources', sources);
+  await app.register(adminRoutes, { sources, channels });
 
   // Serve the built frontend, falling back to index.html for client-side routes.
   if (fs.existsSync(config.webDir)) {

@@ -18,6 +18,41 @@ const migrations: string[] = [
   );
   CREATE INDEX sessions_user ON sessions(user_id);
   `,
+  `
+  CREATE TABLE sources (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('m3u_url', 'm3u_file', 'xtream')),
+    url TEXT,
+    username TEXT,
+    password TEXT,
+    file_content TEXT,
+    user_agent TEXT,
+    refresh_hours INTEGER NOT NULL DEFAULT 24,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    last_refreshed_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE TABLE channels (
+    id INTEGER PRIMARY KEY,
+    source_id INTEGER NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    stream_key TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    group_title TEXT,
+    logo TEXT,
+    tvg_id TEXT,
+    stream_url TEXT NOT NULL,
+    custom_name TEXT,
+    custom_group TEXT,
+    custom_logo TEXT,
+    number INTEGER,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (source_id, stream_key)
+  );
+  CREATE INDEX channels_order ON channels(number, source_id, position);
+  `,
 ];
 
 export type Db = DatabaseSync;
