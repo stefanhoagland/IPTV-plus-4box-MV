@@ -1,0 +1,17 @@
+services:
+  iptv-multiview:
+    build: .
+    image: ghcr.io/stefanhoagland/iptv-plus-4box-mv:latest
+    container_name: iptv-multiview
+    restart: unless-stopped
+    ports:
+      - "9292:9292"
+    volumes:
+      - /mnt/user/appdata/iptv-multiview:/config
+    environment:
+      - TZ=America/New_York
+      # Optional: create/reset the admin login on startup instead of using the first-run screen.
+      # - ADMIN_USERNAME=admin
+      # - ADMIN_PASSWORD=change-me-please
+      # Set to true if you serve this over HTTPS through a reverse proxy.
+      # - SECURE_COOKIES=true
