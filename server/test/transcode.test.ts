@@ -20,6 +20,14 @@ test('ffmpeg args copy browser-friendly video and always make AAC audio', () => 
   assert.equal(browserPlayable({ video: { codec: 'h264' }, audio: { codec: 'aac' } }), true);
   assert.equal(browserPlayable({ video: { codec: 'h264' }, audio: { codec: 'eac3' } }), false);
   assert.equal(browserPlayable({ video: { codec: 'hevc' }, audio: null }), false);
+  // 10-bit / 4:2:2 H.264 is still H.264 but browsers can't decode it, so it gets re-encoded.
+  const high422 = { video: { codec: 'h264', profile: 'High 4:2:2', pixFmt: 'yuv422p10le' }, audio: { codec: 'aac' } };
+  assert.equal(browserPlayable(high422), false);
+  const args422 = ffmpegArgs('http://x/a.m3u8', 'UA', high422);
+  assert.equal(args422[args422.indexOf('-c:v') + 1], 'libx264');
+  assert.equal(browserPlayable({ video: { codec: 'h264', profile: 'High', pixFmt: 'yuv420p' }, audio: { codec: 'aac' } }), true);
+  const forced = ffmpegArgs('http://x/a.m3u8', 'UA', { video: { codec: 'h264' }, audio: { codec: 'aac' } }, true);
+  assert.equal(forced[forced.indexOf('-c:v') + 1], 'libx264');
 });
 
 test('compat mode turns an MPEG-2 + AC-3 channel into H.264 + AAC', { skip: !hasFfmpeg && 'ffmpeg not installed' }, async () => {

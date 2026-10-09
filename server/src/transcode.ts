@@ -10,20 +10,27 @@ import type { StreamProxy } from './stream.js';
  */
 
 export interface ProbeResult {
-  video: { codec: string; width?: number; height?: number } | null;
+  video: { codec: string; width?: number; height?: number; profile?: string; pixFmt?: string } | null;
   audio: { codec: string; channels?: number } | null;
 }
 
 const PROBE_CACHE_MS = 60 * 60 * 1000;
-const BROWSER_VIDEO = new Set(['h264']);
 const BROWSER_AUDIO = new Set(['aac', 'mp3']);
 
-export function browserPlayable(p: ProbeResult): boolean {
-  return (!p.video || BROWSER_VIDEO.has(p.video.codec)) && (!p.audio || BROWSER_AUDIO.has(p.audio.codec));
+/** Browsers only decode 8-bit 4:2:0 H.264; High 10 / 4:2:2 / 4:4:4 broadcast feeds show black. */
+function browserVideo(v: NonNullable<ProbeResult['video']>): boolean {
+  if (v.codec !== 'h264') return false;
+  if (v.pixFmt && !/^yuvj?420p$/.test(v.pixFmt)) return false;
+  return !v.profile || !/10|4:2:2|4:4:4/.test(v.profile);
 }
 
-export function ffmpegArgs(url: string, userAgent: string, probe: ProbeResult | null): string[] {
-  const copyVideo = probe?.video ? BROWSER_VIDEO.has(probe.video.codec) : false;
+export function browserPlayable(p: ProbeResult): boolean {
+  return (!p.video || browserVideo(p.video)) && (!p.audio || BROWSER_AUDIO.has(p.audio.codec));
+}
+
+/** `reencode`: always re-encode the video, for pictures that stay black even when the codec looks fine. */
+export function ffmpegArgs(url: string, userAgent: string, probe: ProbeResult | null, reencode = false): string[] {
+  const copyVideo = !reencode && probe?.video ? browserVideo(probe.video) : false;
   return [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
     '-user_agent', userAgent, '-reconnect', '1', '-reconnect_streamed', '1', '-reconnect_delay_max', '5',
@@ -75,13 +82,13 @@ export class Transcoder {
     const ch = this.channel(channelId);
     const http = ['-user_agent', ch.userAgent];
     const json = JSON.parse(
-      await run(this.ffprobe, ['-v', 'error', ...http, '-protocol_whitelist', 'http,https,tcp,tls,crypto,hls', '-analyzeduration', '5000000', '-probesize', '5000000', '-show_entries', 'stream=codec_type,codec_name,width,height,channels', '-of', 'json', ch.url], 20_000),
-    ) as { streams?: { codec_type: string; codec_name: string; width?: number; height?: number; channels?: number }[] };
+      await run(this.ffprobe, ['-v', 'error', ...http, '-protocol_whitelist', 'http,https,tcp,tls,crypto,hls', '-analyzeduration', '5000000', '-probesize', '5000000', '-show_entries', 'stream=codec_type,codec_name,width,height,channels,profile,pix_fmt', '-of', 'json', ch.url], 20_000),
+    ) as { streams?: { codec_type: string; codec_name: string; width?: number; height?: number; channels?: number; profile?: string; pix_fmt?: string }[] };
     const streams = json.streams ?? [];
     const v = streams.find((s) => s.codec_type === 'video');
     const a = streams.find((s) => s.codec_type === 'audio');
     const result: ProbeResult = {
-      video: v ? { codec: v.codec_name, width: v.width, height: v.height } : null,
+      video: v ? { codec: v.codec_name, width: v.width, height: v.height, profile: v.profile, pixFmt: v.pix_fmt } : null,
       audio: a ? { codec: a.codec_name, channels: a.channels } : null,
     };
     this.probes.set(channelId, { at: Date.now(), result });
@@ -96,7 +103,7 @@ export class Transcoder {
     return ch;
   }
 
-  async stream(req: FastifyRequest, reply: FastifyReply, channelId: number) {
+  async stream(req: FastifyRequest, reply: FastifyReply, channelId: number, reencode = false) {
     let ch: { url: string; userAgent: string };
     try {
       ch = this.channel(channelId);
@@ -106,7 +113,7 @@ export class Transcoder {
     }
     // Without a probe, re-encode video to be safe; a probe failure shouldn't block playback.
     const probe = await this.probe(channelId).catch(() => null);
-    const child = spawn(this.ffmpeg, ffmpegArgs(ch.url, ch.userAgent, probe), { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(this.ffmpeg, ffmpegArgs(ch.url, ch.userAgent, probe, reencode), { stdio: ['ignore', 'pipe', 'pipe'] });
     let stderr = '';
     child.stderr.on('data', (d) => (stderr = (stderr + d).slice(-2000)));
     const spawned = await new Promise<Error | null>((resolve) => {
@@ -140,5 +147,8 @@ export async function transcodeRoutes(app: FastifyInstance, opts: { transcoder: 
     }
   });
 
-  app.get('/api/play/:id/compat', async (req, reply) => transcoder.stream(req, reply, channelId(req)));
+  app.get('/api/play/:id/compat', async (req, reply) => {
+    const reencode = (req.query as { reencode?: string }).reencode === '1';
+    return transcoder.stream(req, reply, channelId(req), reencode);
+  });
 }
