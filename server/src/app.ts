@@ -8,6 +8,8 @@ import { AuthService, SESSION_TTL_MS, validateCredentials, type User } from './a
 import { SourceService } from './sources.js';
 import { ChannelService } from './channels.js';
 import { adminRoutes } from './routes/admin.js';
+import { multiviewRoutes } from './routes/multiview.js';
+import { StreamProxy, streamRoutes } from './stream.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -109,6 +111,8 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   const channels = new ChannelService(db);
   app.decorate('sources', sources);
   await app.register(adminRoutes, { sources, channels });
+  await app.register(multiviewRoutes, { db, channels });
+  await app.register(streamRoutes, { proxy: new StreamProxy(db, deps.fetch) });
 
   // Serve the built frontend, falling back to index.html for client-side routes.
   if (fs.existsSync(config.webDir)) {
