@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Channel } from '../api';
 import Player from '../multiview/Player';
 import ChannelPicker from '../multiview/ChannelPicker';
+import NflPreset from '../multiview/NflPreset';
 import { Close, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
 
 interface Tile {
@@ -15,6 +16,7 @@ const EMPTY: Tile[] = Array.from({ length: 4 }, () => ({ channelId: null, muted:
 export default function MultiviewPage() {
   const [tiles, setTiles] = useState<Tile[]>(EMPTY);
   const [picking, setPicking] = useState<number | null>(null);
+  const [nfl, setNfl] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -22,24 +24,32 @@ export default function MultiviewPage() {
     api<{ tiles: Tile[] }>('/api/multiview').then((r) => setTiles(r.tiles), (e) => setError(e.message));
   }, []);
 
-  const update = useCallback((index: number, change: Partial<Tile>) => {
-    setTiles((prev) => {
-      const next = prev.map((t, i) => (i === index ? { ...t, ...change } : t));
-      void api('/api/multiview', { method: 'PUT', body: { tiles: next.map(({ channelId, muted }) => ({ channelId, muted })) } }).catch((e) => setError(e.message));
-      return next;
-    });
+  const save = useCallback((next: Tile[]) => {
+    void api('/api/multiview', { method: 'PUT', body: { tiles: next.map(({ channelId, muted }) => ({ channelId, muted })) } }).catch((e) => setError(e.message));
+    return next;
   }, []);
+
+  const update = useCallback(
+    (index: number, change: Partial<Tile>) => setTiles((prev) => save(prev.map((t, i) => (i === index ? { ...t, ...change } : t)))),
+    [save],
+  );
+
+  /** Presets: put these channels in boxes 1..n, keeping each box's audio setting; leftover boxes keep what they had. */
+  const fill = useCallback(
+    (channels: Channel[]) => setTiles((prev) => save(prev.map((t, i) => (channels[i] ? { ...t, channelId: channels[i].id, channel: channels[i] } : t)))),
+    [save],
+  );
 
   // Keys 1-4 toggle each box's audio.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (picking !== null || e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (picking !== null || nfl || e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (n >= 1 && n <= 4 && tiles[n - 1].channelId !== null) update(n - 1, { muted: !tiles[n - 1].muted });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tiles, picking, update]);
+  }, [tiles, picking, nfl, update]);
 
   const fullscreen = (i: number) => {
     const el = tileRefs.current[i];
@@ -50,6 +60,12 @@ export default function MultiviewPage() {
 
   return (
     <div className="multiview">
+      <div className="mv-toolbar">
+        <span className="muted small">Click a box to choose its channel</span>
+        <button className="ghost small-btn" onClick={() => setNfl(true)}>
+          🏈 Live NFL
+        </button>
+      </div>
       {error && (
         <div className="mv-error" role="alert">
           {error}
@@ -110,6 +126,16 @@ export default function MultiviewPage() {
           </div>
         ))}
       </div>
+      {nfl && (
+        <NflPreset
+          onClose={() => setNfl(false)}
+          onFill={(channels) => {
+            fill(channels);
+            setNfl(false);
+          }}
+          onPlace={(box, c) => update(box, { channelId: c.id, channel: c })}
+        />
+      )}
       {picking !== null && (
         <ChannelPicker
           box={picking + 1}

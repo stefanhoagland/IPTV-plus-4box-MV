@@ -53,6 +53,15 @@ On the **Multiview** page, click any box to choose its channel (search, or filte
 
 Your four boxes and their audio settings are remembered. All playback goes through the server (`/api/play/…`), so provider credentials never reach the browser and streams work even without CORS headers. HLS (`.m3u8`) plays everywhere; raw MPEG-TS streams play in Chrome, Edge and Firefox.
 
+## Live NFL preset
+
+On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public schedule) with the channel each one is on in *your* list:
+
+1. A channel named after the matchup, e.g. `NFL 01: Chicago Bears vs Green Bay Packers` or `NFL 02 | KC @ BUF`.
+2. Otherwise the network carrying it (CBS, FOX, NBC, ABC, ESPN, NFL Network, Prime Video, Peacock, Netflix), skipping sister channels such as FOX News or CBS Sports Network.
+
+**Put live games in the boxes** fills boxes 1–4 (game channels before network channels); the 1–4 buttons on each game put it in a specific box. Providers rename event channels on game day, so playlists older than 3 hours are refreshed before matching. Hidden channels are matched too.
+
 ## Configuration
 
 | Variable | Default | Purpose |
