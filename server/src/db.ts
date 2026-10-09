@@ -53,6 +53,14 @@ const migrations: string[] = [
   );
   CREATE INDEX channels_order ON channels(number, source_id, position);
   `,
+  `
+  CREATE TABLE user_settings (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    PRIMARY KEY (user_id, key)
+  );
+  `,
 ];
 
 export type Db = DatabaseSync;

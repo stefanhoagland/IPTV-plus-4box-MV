@@ -4,9 +4,7 @@ A self-hosted IPTV manager with a 4-box multiview. Add your IPTV playlists in th
 
 Runs as a single Docker container, built for Unraid.
 
-| First run | Multiview |
-| --- | --- |
-| ![Setup](docs/screenshots/setup.png) | ![Multiview](docs/screenshots/multiview.png) |
+![Multiview](docs/screenshots/multiview.png)
 
 | Admin: sources | Admin: channels |
 | --- | --- |
@@ -16,7 +14,7 @@ Runs as a single Docker container, built for Unraid.
 
 1. **Foundation**: app shell, login, SQLite storage, Docker/Unraid packaging ✅
 2. **Admin**: add M3U / Xtream sources, import and manage channels ✅
-3. **Multiview**: 2x2 HLS player, click a box to pick its channel, per-box audio toggle, fullscreen
+3. **Multiview**: 2x2 HLS player, click a box to pick its channel, per-box audio toggle, fullscreen ✅
 4. **Polish**: EPG / now playing, favorites, more layouts
 
 ## Install on Unraid
@@ -44,6 +42,16 @@ In **Admin → Sources**, add one or more sources:
 Linked sources refresh automatically (every 24 hours by default; change it under *Advanced*). Some providers only answer known players, so the default user agent is VLC's; you can change that under *Advanced* too.
 
 In **Admin → Channels**, hide what you don't watch (one at a time, or a whole group with *Hide all*), give favourites a number to put them first, and rename or re-logo channels. Your edits are kept when a source refreshes. Only visible channels will appear in the multiview picker.
+
+## Watching
+
+On the **Multiview** page, click any box to choose its channel (search, or filter by group). Hover a box for its controls:
+
+- 🔊 **Audio** on/off for that box. Boxes start muted; any number can be on at once. Keys **1–4** toggle each box's audio too.
+- ⛶ **Fullscreen** for that box.
+- ✕ **Clear** the box.
+
+Your four boxes and their audio settings are remembered. All playback goes through the server (`/api/play/…`), so provider credentials never reach the browser and streams work even without CORS headers. HLS (`.m3u8`) plays everywhere; raw MPEG-TS streams play in Chrome, Edge and Firefox.
 
 ## Configuration
 
