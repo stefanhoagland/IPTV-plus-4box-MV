@@ -10,6 +10,7 @@ import { ChannelService } from './channels.js';
 import { adminRoutes } from './routes/admin.js';
 import { multiviewRoutes } from './routes/multiview.js';
 import { StreamProxy, streamRoutes } from './stream.js';
+import { Transcoder, transcodeRoutes } from './transcode.js';
 import { NflService } from './nfl.js';
 import { nflRoutes } from './routes/nfl.js';
 
@@ -114,7 +115,9 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   app.decorate('sources', sources);
   await app.register(adminRoutes, { sources, channels });
   await app.register(multiviewRoutes, { db, channels });
-  await app.register(streamRoutes, { proxy: new StreamProxy(db, deps.fetch) });
+  const proxy = new StreamProxy(db, deps.fetch);
+  await app.register(streamRoutes, { proxy });
+  await app.register(transcodeRoutes, { transcoder: new Transcoder(proxy) });
   await app.register(nflRoutes, { nfl: new NflService(db, channels, deps.fetch), sources });
 
   // Serve the built frontend, falling back to index.html for client-side routes.
