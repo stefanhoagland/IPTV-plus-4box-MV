@@ -126,7 +126,35 @@ const NETWORKS: { test: RegExp; channel: RegExp }[] = [
   { test: /^tbs/i, channel: /\btbs\b/i },
   { test: /^tru\s*tv/i, channel: /\btru\s*tv\b/i },
   { test: /^usa\s*net/i, channel: /\busa\s*network\b/i },
+  // Regional sports networks, e.g. "FDSN Ohio" -> "FanDuel Sports Ohio" / "Bally Sports Ohio".
+  { test: /^(fdsn|fanduel\s*sports|bally\s*sports)\s+\w/i, channel: /\b(fdsn|fanduel\s*sports(\s*network)?|bally\s*sports)\b/i },
+  { test: /^(nbcs|nbc\s*sports)\s+\w/i, channel: /\bnbc\s*sports\b/i },
+  { test: /^(spectrum\s*sports\s*net|sportsnet\s*la|spectrum\s*sn)/i, channel: /\bspectrum\s*sports\s*net/i },
 ];
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * How to recognise a network's channel. Known networks use the table above; a regional network also
+ * needs its region ("FDSN Ohio" must not pick "FanDuel Sports Detroit"). Anything else (NESN, MSG,
+ * YES, Marquee, a local station...) matches a channel with the same name.
+ */
+function networkMatcher(net: string): (c: { name: string }) => boolean {
+  const known = NETWORKS.find((n) => n.test.test(net));
+  if (known) {
+    const region = /^(fdsn|fanduel\s*sports|bally\s*sports|nbcs|nbc\s*sports)\s+(.+)$/i.exec(net)?.[2];
+    if (region) {
+      const words = norm(region).trim().split(' ').filter((w) => w.length > 1 && w !== 'network');
+      return (c) => known.channel.test(c.name) && words.every((w) => has(norm(c.name), w));
+    }
+    return (c) => known.channel.test(c.name);
+  }
+  // Streaming-only services have no channel unless the list names them, which the literal match covers.
+  const words = norm(net).trim();
+  if (words.length < 3) return () => false;
+  const pattern = new RegExp(`(^|[^a-z0-9])${escape(words).replace(/ /g, '[^a-z0-9]*')}([^a-z0-9]|$)`, 'i');
+  return (c) => pattern.test(c.name.toLowerCase());
+}
 
 function teamsMatch(name: string, game: Game, matchLocation: boolean): boolean {
   const n = norm(name);
@@ -185,9 +213,7 @@ export class ScoreboardService {
       if (result.has(g.id)) continue;
       let hit: { id: number } | undefined;
       for (const net of g.networks) {
-        const pattern = NETWORKS.find((n) => n.test.test(net.trim()))?.channel;
-        if (!pattern) continue;
-        hit = all.find((c) => pattern.test(c.name));
+        hit = all.find(networkMatcher(net.trim()));
         if (hit) break;
       }
       result.set(g.id, { ...g, channel: hit ? this.channels.get(hit.id) : null, matchedBy: hit ? 'network' : null });
