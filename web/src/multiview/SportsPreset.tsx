@@ -25,13 +25,31 @@ function kickoff(iso: string) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-export default function NflPreset({ onFill, onPlace, onClose }: { onFill(channels: Channel[]): void; onPlace(box: number, c: Channel): void; onClose(): void }) {
+export type League = 'nfl' | 'ncaab';
+
+const LEAGUES: Record<League, { title: string; name: string; example: string; networks: string }> = {
+  nfl: { title: 'Live NFL', name: 'NFL', example: 'NFL 01: Bears vs Packers', networks: 'CBS, FOX, NBC, ESPN…' },
+  ncaab: { title: 'College Basketball', name: 'college basketball', example: 'NCAAB 01: Duke vs North Carolina', networks: 'ESPN, ESPNU, CBS Sports Network, FS1, Big Ten Network…' },
+};
+
+export default function SportsPreset({
+  league,
+  onFill,
+  onPlace,
+  onClose,
+}: {
+  league: League;
+  onFill(channels: Channel[]): void;
+  onPlace(box: number, c: Channel): void;
+  onClose(): void;
+}) {
+  const info = LEAGUES[league];
   const [games, setGames] = useState<Game[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api<{ games: Game[] }>('/api/presets/nfl').then((r) => setGames(r.games), (e) => setError(e.message));
-  }, []);
+    api<{ games: Game[] }>(`/api/presets/${league}`).then((r) => setGames(r.games), (e) => setError(e.message));
+  }, [league]);
 
   // Dedicated game channels first: a network channel (e.g. FOX) may be showing a different regional game.
   const liveChannels: Channel[] = [];
@@ -42,11 +60,11 @@ export default function NflPreset({ onFill, onPlace, onClose }: { onFill(channel
   const liveCount = games?.filter((g) => g.state === 'in').length ?? 0;
 
   return (
-    <Modal title="Live NFL" onClose={onClose}>
+    <Modal title={info.title} onClose={onClose}>
       <div className="nfl">
         {error && <div className="error">{error}</div>}
         {!games && !error && <p className="muted">Checking today's games…</p>}
-        {games && games.length === 0 && <p className="muted">No NFL games on the schedule today.</p>}
+        {games && games.length === 0 && <p className="muted">No {info.name} games on the schedule today.</p>}
         {games && games.length > 0 && (
           <div className="nfl-fill">
             {liveChannels.length > 0 ? (
@@ -97,8 +115,8 @@ export default function NflPreset({ onFill, onPlace, onClose }: { onFill(channel
           );
         })}
         <p className="muted small">
-          Games come from ESPN's schedule and are matched to your channels by team names (e.g. "NFL 01: Bears vs Packers"), then by network (CBS, FOX, NBC, ESPN…). Event channel
-          names change on game day, so playlists older than 3 hours are refreshed before matching.
+          Games come from ESPN's schedule and are matched to your channels by team names (e.g. "{info.example}"), then by network ({info.networks}). Event channel names
+          change on game day, so playlists older than 3 hours are refreshed before matching.
         </p>
       </div>
     </Modal>

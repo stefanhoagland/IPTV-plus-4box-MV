@@ -3,7 +3,7 @@ import { api, type Channel } from '../api';
 import Player from '../multiview/Player';
 import WatchOnTv from '../multiview/WatchOnTv';
 import ChannelPicker from '../multiview/ChannelPicker';
-import NflPreset from '../multiview/NflPreset';
+import SportsPreset, { type League } from '../multiview/SportsPreset';
 import { Close, FixPicture, Info, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
 
 interface Tile {
@@ -17,7 +17,7 @@ const EMPTY: Tile[] = Array.from({ length: 4 }, () => ({ channelId: null, muted:
 export default function MultiviewPage() {
   const [tiles, setTiles] = useState<Tile[]>(EMPTY);
   const [picking, setPicking] = useState<number | null>(null);
-  const [nfl, setNfl] = useState(false);
+  const [sport, setSport] = useState<League | null>(null);
   const [tv, setTv] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixRequests, setFixRequests] = useState([0, 0, 0, 0]);
@@ -47,13 +47,13 @@ export default function MultiviewPage() {
   // Keys 1-4 toggle each box's audio.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (picking !== null || nfl || e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (picking !== null || sport || e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
       const n = Number(e.key);
       if (n >= 1 && n <= 4 && tiles[n - 1].channelId !== null) update(n - 1, { muted: !tiles[n - 1].muted });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tiles, picking, nfl, update]);
+  }, [tiles, picking, sport, update]);
 
   const fullscreen = (i: number) => {
     const el = tileRefs.current[i];
@@ -70,8 +70,11 @@ export default function MultiviewPage() {
           <button className="ghost small-btn" onClick={() => setTv(true)}>
             📺 Watch on TV
           </button>
-          <button className="ghost small-btn" onClick={() => setNfl(true)}>
+          <button className="ghost small-btn" onClick={() => setSport('nfl')}>
             🏈 Live NFL
+          </button>
+          <button className="ghost small-btn" onClick={() => setSport('ncaab')}>
+            🏀 College Hoops
           </button>
         </div>
       </div>
@@ -152,12 +155,13 @@ export default function MultiviewPage() {
         ))}
       </div>
       {tv && <WatchOnTv onClose={() => setTv(false)} />}
-      {nfl && (
-        <NflPreset
-          onClose={() => setNfl(false)}
+      {sport && (
+        <SportsPreset
+          league={sport}
+          onClose={() => setSport(null)}
           onFill={(channels) => {
             fill(channels);
-            setNfl(false);
+            setSport(null);
           }}
           onPlace={(box, c) => update(box, { channelId: c.id, channel: c })}
         />
