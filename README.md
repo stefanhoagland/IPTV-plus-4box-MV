@@ -76,7 +76,7 @@ On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public
 
 **Put live games in the boxes** fills boxes 1–4 (game channels before network channels); the 1–4 buttons on each game put it in a specific box. Providers rename event channels on game day, so playlists older than 3 hours are refreshed before matching. Hidden channels are matched too.
 
-**🏀 College Hoops** does the same for Division I men's college basketball. Event channels are matched by school (`NCAAB 01: Duke vs North Carolina`), then by network: ESPN, ESPN2, ESPNU, ESPNews, CBS, CBS Sports Network, FOX, FS1, FS2, ABC, NBC, TNT, TBS, truTV, USA Network, ACC Network, SEC Network, Big Ten Network and Pac-12. Games that only stream on ESPN+ or Peacock show up without a channel unless your list has one for that service.
+**🏀 College Hoops** does the same for Division I men's college basketball. Event channels are matched by school (`NCAAB 01: Duke vs North Carolina`), then by network: ESPN, ESPN2, ESPNU, ESPNews, CBS, CBS Sports Network, FOX, FS1, FS2, ABC, NBC, TNT, TBS, truTV, USA Network, ACC Network, SEC Network, Big Ten Network and Pac-12. Regional networks need the right region (`FDSN Ohio` → *FanDuel Sports Ohio* or *Bally Sports Ohio*), and any other station ESPN lists (NESN, MSG, YES, Marquee, a local station…) is matched by name. Games that only stream on ESPN+ or Peacock show up without a channel unless your list has one for that service.
 
 ## Configuration
 

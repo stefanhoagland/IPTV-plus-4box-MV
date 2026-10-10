@@ -140,3 +140,26 @@ test('college basketball preset matches schools by name and college networks', a
   assert.equal(byId['14'].channel, null, 'ESPN+ has no channel');
   assert.equal((await call('GET', '/api/presets/nhl-nope')).statusCode, 404);
 });
+
+test('regional and other stations are found by name', async () => {
+  const school = (name: string, location: string, abbreviation: string) => ({ name, location, displayName: `${location} ${name}`, shortDisplayName: location, abbreviation });
+  const games = {
+    events: [
+      event('21', school('Huskies', 'UConn', 'CONN'), school('Eagles', 'Boston College', 'BC'), 'in', ['NESN']),
+      event('22', school('Bearcats', 'Cincinnati', 'CIN'), school('Musketeers', 'Xavier', 'XAV'), 'in', ['FDSN Ohio']),
+      event('23', school('Ramblers', 'Loyola Chicago', 'LUC'), school('Billikens', 'Saint Louis', 'SLU'), 'in', ['Marquee Sports Network']),
+      event('24', school('Wildcats', 'Villanova', 'VILL'), school('Hoyas', 'Georgetown', 'GTWN'), 'in', ['Some Tiny Station']),
+    ],
+  };
+  const list = ['#EXTM3U', 'US: FanDuel Sports Detroit', 'US: FanDuel Sports Ohio HD', 'US: NESN', 'US: Marquee Sports Network']
+    .flatMap((n, i) => (i === 0 ? [n] : [`#EXTINF:-1,${n}`, `http://x/${i}.m3u8`]))
+    .join('\n');
+  const { fn } = fakeFetch({ 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard': games });
+  const { call } = await loggedInApp({ fetch: fn });
+  await call('POST', '/api/sources', { type: 'm3u_file', name: 'P', fileContent: list });
+  const byId = Object.fromEntries((await call('GET', '/api/presets/ncaab')).json().games.map((g: { id: string }) => [g.id, g]));
+  assert.equal(byId['21'].channel.name, 'US: NESN');
+  assert.equal(byId['22'].channel.name, 'US: FanDuel Sports Ohio HD', 'the Ohio feed, not Detroit');
+  assert.equal(byId['23'].channel.name, 'US: Marquee Sports Network');
+  assert.equal(byId['24'].channel, null);
+});
