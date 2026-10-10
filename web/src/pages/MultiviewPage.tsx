@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, type Channel } from '../api';
 import Player from '../multiview/Player';
+import WatchOnTv from '../multiview/WatchOnTv';
 import ChannelPicker from '../multiview/ChannelPicker';
 import NflPreset from '../multiview/NflPreset';
 import { Close, FixPicture, Info, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
@@ -17,6 +18,7 @@ export default function MultiviewPage() {
   const [tiles, setTiles] = useState<Tile[]>(EMPTY);
   const [picking, setPicking] = useState<number | null>(null);
   const [nfl, setNfl] = useState(false);
+  const [tv, setTv] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fixRequests, setFixRequests] = useState([0, 0, 0, 0]);
   const [detailsRequests, setDetailsRequests] = useState([0, 0, 0, 0]);
@@ -64,9 +66,14 @@ export default function MultiviewPage() {
     <div className="multiview">
       <div className="mv-toolbar">
         <span className="muted small">Click a box to choose its channel</span>
-        <button className="ghost small-btn" onClick={() => setNfl(true)}>
-          🏈 Live NFL
-        </button>
+        <div className="mv-actions">
+          <button className="ghost small-btn" onClick={() => setTv(true)}>
+            📺 Watch on TV
+          </button>
+          <button className="ghost small-btn" onClick={() => setNfl(true)}>
+            🏈 Live NFL
+          </button>
+        </div>
       </div>
       {error && (
         <div className="mv-error" role="alert">
@@ -144,6 +151,7 @@ export default function MultiviewPage() {
           </div>
         ))}
       </div>
+      {tv && <WatchOnTv onClose={() => setTv(false)} />}
       {nfl && (
         <NflPreset
           onClose={() => setNfl(false)}
