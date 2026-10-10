@@ -14,7 +14,7 @@ export async function loggedInApp(deps: AppDeps = {}) {
   const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { username: 'admin', password: 'correct-horse' } });
   const raw = login.headers['set-cookie'];
   const cookie = (Array.isArray(raw) ? raw[0] : String(raw)).split(';')[0];
-  const call = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, payload?: unknown) =>
+  const call = (method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, payload?: unknown) =>
     app.inject({ method, url, payload: payload as object, headers: { cookie } });
   return { app, call };
 }

@@ -12,6 +12,7 @@ import { userRoutes } from './routes/users.js';
 import { multiviewRoutes } from './routes/multiview.js';
 import { StreamProxy, streamRoutes } from './stream.js';
 import { Transcoder, transcodeRoutes } from './transcode.js';
+import { MosaicService, mosaicRoutes } from './mosaic.js';
 import { NflService } from './nfl.js';
 import { nflRoutes } from './routes/nfl.js';
 
@@ -127,8 +128,10 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   const channels = new ChannelService(db);
   app.decorate('sources', sources);
   await app.register(adminRoutes, { sources, channels });
-  await app.register(multiviewRoutes, { db, channels });
   const proxy = new StreamProxy(db, deps.fetch);
+  const mosaic = new MosaicService(db, proxy);
+  await app.register(multiviewRoutes, { db, channels, onChange: (userId) => mosaic.layoutChanged(userId) });
+  await app.register(mosaicRoutes, { mosaic });
   await app.register(streamRoutes, { proxy });
   await app.register(transcodeRoutes, { transcoder: new Transcoder(proxy) });
   await app.register(nflRoutes, { nfl: new NflService(db, channels, deps.fetch), sources });

@@ -55,6 +55,12 @@ Your four boxes and their audio settings are remembered. All playback goes throu
 
 Some channels use formats browsers can't decode, typically Dolby (AC-3/E-AC-3) audio or MPEG-2/HEVC video, which shows up as a black box. The player detects this (codec errors, sound but no picture, or nothing starting) and switches that box to a **converted** stream: the server runs it through ffmpeg, copying H.264 video when it can and re-encoding otherwise, with stereo AAC audio. Converted boxes show a small *Converted* label, and the app remembers which channels need it. Re-encoding video uses CPU on the server (roughly one core per channel at 720p).
 
+## Watching on a TV
+
+Click **📺 Watch on TV** on the Multiview page to get your private playlist link. Add it as an M3U playlist in any IPTV app on your TV (TiviMate on Fire Stick, an IPTV or VLC app on Apple TV or Roku, a smart TV's IPTV app) and open **My Multiview**: your four boxes as one 1080p channel, with sound from the boxes whose audio is on. Change boxes or audio in the web app (on your phone, say) and the TV follows within a few seconds.
+
+The server builds that picture with ffmpeg while a TV is watching, which uses a couple of CPU cores, and it opens its own connection to each channel. A channel that won't open is shown black for a minute, then tried again. Anyone with the link can watch, so keep it private; **New link** turns the old one off.
+
 ## Users
 
 Everyone who watches can have their own login and their own four boxes. As an admin, open **Admin → Users** and click **Add user**. New users are **viewers**: they can watch and pick channels, but don't see the Admin pages. Tick **Admin** to let someone manage sources, channels and users too. The first account you create, and the `ADMIN_USERNAME` account, are admins.
