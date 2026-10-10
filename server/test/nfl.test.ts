@@ -80,7 +80,7 @@ test('NFL preset reports a schedule outage', async () => {
   const { call } = await loggedInApp({ fetch: fn });
   const res = await call('GET', '/api/presets/nfl');
   assert.equal(res.statusCode, 502);
-  assert.match(res.json().error, /NFL schedule unavailable/);
+  assert.match(res.json().error, /NFL schedule is unavailable/);
 });
 
 test('NFL preset re-pulls stale playlists so game-day channel names are current', async () => {
@@ -104,4 +104,39 @@ test('NFL preset re-pulls stale playlists so game-day channel names are current'
   games = (await call('GET', '/api/presets/nfl')).json().games;
   assert.equal(games[0].channel.name, 'NFL 01 | Bears vs Packers');
   assert.equal(calls.filter((c) => c.url === 'http://provider/list.m3u').length, 2);
+});
+
+test('college basketball preset matches schools by name and college networks', async () => {
+  const school = (name: string, location: string, abbreviation: string) => ({ name, location, displayName: `${location} ${name}`, shortDisplayName: location, abbreviation });
+  const games = {
+    events: [
+      event('11', school('Blue Devils', 'Duke', 'DUKE'), school('Tar Heels', 'North Carolina', 'UNC'), 'in', ['ESPN']),
+      event('12', school('Wildcats', 'Kentucky', 'UK'), school('Jayhawks', 'Kansas', 'KU'), 'in', ['ESPN']),
+      event('13', school('Spartans', 'Michigan State', 'MSU'), school('Hoosiers', 'Indiana', 'IU'), 'in', ['BTN']),
+      event('14', school('Bulldogs', 'Gonzaga', 'GONZ'), school('Gaels', "Saint Mary's", 'SMC'), 'pre', ['ESPN+']),
+    ],
+  };
+  const list = [
+    '#EXTM3U',
+    '#EXTINF:-1,NCAAB 01: Duke vs North Carolina',
+    'http://x/ev1.m3u8',
+    '#EXTINF:-1,US: ESPN HD',
+    'http://x/espn.m3u8',
+    '#EXTINF:-1,US: ESPNU',
+    'http://x/espnu.m3u8',
+    '#EXTINF:-1,US: Big Ten Network',
+    'http://x/btn.m3u8',
+  ].join('\n');
+  const { fn } = fakeFetch({ 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard': games });
+  const { call } = await loggedInApp({ fetch: fn });
+  await call('POST', '/api/sources', { type: 'm3u_file', name: 'P', fileContent: list });
+  const res = await call('GET', '/api/presets/ncaab');
+  assert.equal(res.statusCode, 200, res.body);
+  const byId = Object.fromEntries(res.json().games.map((g: { id: string; channel: { name: string } | null; matchedBy: string | null }) => [g.id, g]));
+  assert.equal(byId['11'].channel.name, 'NCAAB 01: Duke vs North Carolina');
+  assert.equal(byId['11'].matchedBy, 'teams');
+  assert.equal(byId['12'].channel.name, 'US: ESPN HD', 'ESPN, not ESPNU');
+  assert.equal(byId['13'].channel.name, 'US: Big Ten Network');
+  assert.equal(byId['14'].channel, null, 'ESPN+ has no channel');
+  assert.equal((await call('GET', '/api/presets/nhl-nope')).statusCode, 404);
 });

@@ -2,17 +2,40 @@ import type { Db } from './db.js';
 import type { ChannelService, ChannelView } from './channels.js';
 
 /**
- * "Live NFL" preset: today's games come from ESPN's public scoreboard, then each game is
- * matched to a channel in the user's own list, first by team names (event channels such as
- * "NFL 03: Bears vs Packers"), then by the network carrying it (CBS, FOX, NBC, ESPN, ...).
+ * Sports presets ("Live NFL", "College Basketball"): today's games come from ESPN's public
+ * scoreboard, then each game is matched to a channel in the user's own list, first by team names
+ * (event channels such as "NFL 03: Bears vs Packers"), then by the network carrying it (CBS, ESPN, ...).
  */
 
 export const SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
 const CACHE_MS = 60_000;
 
+export interface League {
+  key: string;
+  label: string;
+  url: string;
+  /** Env var that overrides the scoreboard URL (tests, mirrors). */
+  urlEnv: string;
+  /** College channels name schools by place ("Duke vs North Carolina"), so match on that too. */
+  matchLocation: boolean;
+}
+
+export const LEAGUES: Record<string, League> = {
+  nfl: { key: 'nfl', label: 'NFL', url: SCOREBOARD_URL, urlEnv: 'NFL_SCOREBOARD_URL', matchLocation: false },
+  ncaab: {
+    key: 'ncaab',
+    label: 'college basketball',
+    // groups=50 is all of Division I; without it ESPN only lists featured games.
+    url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=400',
+    urlEnv: 'NCAAB_SCOREBOARD_URL',
+    matchLocation: true,
+  },
+};
+
 export interface Team {
-  name: string; // "Bears"
-  fullName: string; // "Chicago Bears"
+  name: string; // "Bears" / "Blue Devils"
+  fullName: string; // "Chicago Bears" / "Duke Blue Devils"
+  location: string; // "Chicago" / "Duke"
   abbreviation: string; // "CHI"
 }
 
@@ -43,7 +66,7 @@ export function parseScoreboard(json: any): Game[] {
     const team = (side: string): Team | null => {
       const t = competitors.find((c) => c?.homeAway === side)?.team;
       if (!t) return null;
-      return { name: t.name ?? t.shortDisplayName ?? '', fullName: t.displayName ?? '', abbreviation: t.abbreviation ?? '' };
+      return { name: t.name ?? t.shortDisplayName ?? '', fullName: t.displayName ?? '', location: t.location ?? t.shortDisplayName ?? '', abbreviation: t.abbreviation ?? '' };
     };
     const home = team('home');
     const away = team('away');
@@ -76,11 +99,16 @@ const has = (haystack: string, word: string) => word.length > 0 && haystack.incl
  * (FOX News, CBS Sports Network, ESPN2 when looking for ESPN, ...).
  */
 const NETWORKS: { test: RegExp; channel: RegExp }[] = [
+  { test: /^(cbs\s*sports\s*net|cbssn)/i, channel: /\b(cbs\s*sports(\s*network)?|cbssn)\b(?!\s*(golazo|hq))/i },
   { test: /^cbs/i, channel: /\bcbs\b(?!\s*(sports|news|reality|drama))/i },
   { test: /^fox/i, channel: /\bfox\b(?!\s*(news|business|weather|soul|life|deportes|sports\s*[12]|\s*sports\s*(racing|plus)))/i },
   { test: /^nbc/i, channel: /\bnbc\b(?!\s*(news|sports\s*(bay|boston|chicago|philadelphia|washington|california)|universo))/i },
   { test: /^abc/i, channel: /\babc\b(?!\s*news)/i },
   { test: /^espn2/i, channel: /\bespn\s*2\b/i },
+  // Streaming-only: only an "ESPN+" channel will do, never the ESPN network.
+  { test: /^espn\s*(\+|plus)/i, channel: /\bespn\s*(\+|plus)/i },
+  { test: /^espnu/i, channel: /\bespn\s*u\b/i },
+  { test: /^espnews/i, channel: /\bespn\s*news\b/i },
   { test: /^espn\s*deportes/i, channel: /\bespn\s*deportes\b/i },
   { test: /^espn/i, channel: /\bespn\b(?!\s*(2|u\b|news|deportes|classic|plus|\+))/i },
   { test: /^nfl\s*net/i, channel: /\bnfl\s*network\b/i },
@@ -88,11 +116,21 @@ const NETWORKS: { test: RegExp; channel: RegExp }[] = [
   { test: /^(prime|amazon)/i, channel: /\b(prime\s*video|amazon|thursday\s*night\s*football|tnf)\b/i },
   { test: /^peacock/i, channel: /\bpeacock\b/i },
   { test: /^netflix/i, channel: /\bnetflix\b/i },
+  { test: /^fs1/i, channel: /\b(fs1|fox\s*sports\s*1)\b/i },
+  { test: /^fs2/i, channel: /\b(fs2|fox\s*sports\s*2)\b/i },
+  { test: /^acc\s*n/i, channel: /\b(acc\s*network|accn)\b/i },
+  { test: /^sec\s*n/i, channel: /\bsec\s*network\b(?!\s*\+)/i },
+  { test: /^(btn|big\s*ten)/i, channel: /\b(big\s*ten\s*network|btn)\b(?!\s*\+)/i },
+  { test: /^pac/i, channel: /\bpac\s*-?\s*12\b/i },
+  { test: /^tnt/i, channel: /\btnt\b(?!\s*sports\s*[2-9])/i },
+  { test: /^tbs/i, channel: /\btbs\b/i },
+  { test: /^tru\s*tv/i, channel: /\btru\s*tv\b/i },
+  { test: /^usa\s*net/i, channel: /\busa\s*network\b/i },
 ];
 
-function teamsMatch(name: string, game: Game): boolean {
+function teamsMatch(name: string, game: Game, matchLocation: boolean): boolean {
   const n = norm(name);
-  const named = (t: Team) => has(n, t.name) || has(n, t.fullName);
+  const named = (t: Team) => has(n, t.name) || has(n, t.fullName) || (matchLocation && has(n, t.location));
   if (named(game.home) && named(game.away)) return true;
   // Abbreviations are short and ambiguous ("NO", "LA"), so only accept "CHI vs GB" / "CHI @ GB" shapes.
   const a = game.away.abbreviation.toLowerCase();
@@ -103,19 +141,20 @@ function teamsMatch(name: string, game: Game): boolean {
   return re(a, h).test(lower) || re(h, a).test(lower);
 }
 
-export class NflService {
+export class ScoreboardService {
   private cache: { at: number; games: Game[] } | null = null;
 
   constructor(
     private db: Db,
     private channels: ChannelService,
     private fetchFn: typeof fetch = fetch,
+    readonly league: League = LEAGUES.nfl,
   ) {}
 
   async games(): Promise<Game[]> {
     if (this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.games;
-    const res = await this.fetchFn(process.env.NFL_SCOREBOARD_URL || SCOREBOARD_URL, { signal: AbortSignal.timeout(15_000), headers: { Accept: 'application/json' } });
-    if (!res.ok) throw new Error(`NFL schedule unavailable (HTTP ${res.status})`);
+    const res = await this.fetchFn(process.env[this.league.urlEnv] || this.league.url, { signal: AbortSignal.timeout(15_000), headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`The ${this.league.label} schedule is unavailable (HTTP ${res.status})`);
     const games = parseScoreboard(await res.json());
     this.cache = { at: Date.now(), games };
     return games;
@@ -134,7 +173,7 @@ export class NflService {
     const result = new Map<string, GameMatch>();
     // Pass 1: game-specific channels, which can only carry one game.
     for (const g of sorted) {
-      const hit = all.find((c) => !used.has(c.id) && teamsMatch(c.name, g));
+      const hit = all.find((c) => !used.has(c.id) && teamsMatch(c.name, g, this.league.matchLocation));
       if (hit) {
         used.add(hit.id);
         result.set(g.id, { ...g, channel: this.channels.get(hit.id), matchedBy: 'teams' });

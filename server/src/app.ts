@@ -13,8 +13,8 @@ import { multiviewRoutes } from './routes/multiview.js';
 import { StreamProxy, streamRoutes } from './stream.js';
 import { Transcoder, transcodeRoutes } from './transcode.js';
 import { MosaicService, mosaicRoutes } from './mosaic.js';
-import { NflService } from './nfl.js';
-import { nflRoutes } from './routes/nfl.js';
+import { LEAGUES, ScoreboardService } from './nfl.js';
+import { sportsRoutes } from './routes/nfl.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -134,7 +134,8 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   await app.register(mosaicRoutes, { mosaic });
   await app.register(streamRoutes, { proxy });
   await app.register(transcodeRoutes, { transcoder: new Transcoder(proxy) });
-  await app.register(nflRoutes, { nfl: new NflService(db, channels, deps.fetch), sources });
+  const leagues = Object.fromEntries(Object.values(LEAGUES).map((l) => [l.key, new ScoreboardService(db, channels, deps.fetch, l)]));
+  await app.register(sportsRoutes, { leagues, sources });
 
   // Serve the built frontend, falling back to index.html for client-side routes.
   if (fs.existsSync(config.webDir)) {

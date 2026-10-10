@@ -67,7 +67,7 @@ Everyone who watches can have their own login and their own four boxes. As an ad
 
 Each box that's playing uses one stream from your provider, so three people with four boxes each can need up to twelve. If a box says *Channel is offline right now* while the channel works elsewhere, your provider (or Dispatcharr) has probably run out of connections.
 
-## Live NFL preset
+## Live sports presets
 
 On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public schedule) with the channel each one is on in *your* list:
 
@@ -75,6 +75,8 @@ On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public
 2. Otherwise the network carrying it (CBS, FOX, NBC, ABC, ESPN, NFL Network, Prime Video, Peacock, Netflix), skipping sister channels such as FOX News or CBS Sports Network.
 
 **Put live games in the boxes** fills boxes 1–4 (game channels before network channels); the 1–4 buttons on each game put it in a specific box. Providers rename event channels on game day, so playlists older than 3 hours are refreshed before matching. Hidden channels are matched too.
+
+**🏀 College Hoops** does the same for Division I men's college basketball. Event channels are matched by school (`NCAAB 01: Duke vs North Carolina`), then by network: ESPN, ESPN2, ESPNU, ESPNews, CBS, CBS Sports Network, FOX, FS1, FS2, ABC, NBC, TNT, TBS, truTV, USA Network, ACC Network, SEC Network, Big Ten Network and Pac-12. Games that only stream on ESPN+ or Peacock show up without a channel unless your list has one for that service.
 
 ## Configuration
 
