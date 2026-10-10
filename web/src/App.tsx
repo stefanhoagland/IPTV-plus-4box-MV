@@ -20,7 +20,7 @@ export default function App() {
         </div>
         <nav>
           <NavLink to="/">Multiview</NavLink>
-          <NavLink to="/admin">Admin</NavLink>
+          {status.user.isAdmin && <NavLink to="/admin">Admin</NavLink>}
         </nav>
         <div className="user">
           <span className="muted">{status.user.username}</span>
@@ -32,7 +32,7 @@ export default function App() {
       <main>
         <Routes>
           <Route path="/" element={<MultiviewPage />} />
-          <Route path="/admin/*" element={<AdminPage />} />
+          {status.user.isAdmin && <Route path="/admin/*" element={<AdminPage />} />}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

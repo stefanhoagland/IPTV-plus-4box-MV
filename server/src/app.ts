@@ -8,6 +8,7 @@ import { AuthService, SESSION_TTL_MS, validateCredentials, type User } from './a
 import { SourceService } from './sources.js';
 import { ChannelService } from './channels.js';
 import { adminRoutes } from './routes/admin.js';
+import { userRoutes } from './routes/users.js';
 import { multiviewRoutes } from './routes/multiview.js';
 import { StreamProxy, streamRoutes } from './stream.js';
 import { Transcoder, transcodeRoutes } from './transcode.js';
@@ -27,6 +28,12 @@ const SESSION_COOKIE = 'iptvmv_session';
 const PUBLIC_API = new Set(['/api/health', '/api/auth/status', '/api/auth/login', '/api/auth/setup']);
 
 // Simple in-memory brute-force guard for login: 10 failures per IP per 15 minutes.
+/** Viewers can watch and pick channels; managing sources, channel edits and accounts is for admins. */
+function adminOnly(method: string, url: string): boolean {
+  if (url.startsWith('/api/sources') || url.startsWith('/api/users')) return true;
+  return url.startsWith('/api/channels') && method !== 'GET';
+}
+
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_MAX_FAILURES = 10;
 
@@ -42,7 +49,7 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
   if (config.adminUsername && config.adminPassword) {
     const problem = validateCredentials(config.adminUsername, config.adminPassword);
     if (problem) throw new Error(`ADMIN_USERNAME/ADMIN_PASSWORD rejected: ${problem}`);
-    await auth.upsertUser(config.adminUsername, config.adminPassword);
+    await auth.upsertAdmin(config.adminUsername, config.adminPassword);
     app.log.info(`Admin account "${config.adminUsername}" set from environment`);
   }
   auth.pruneSessions();
@@ -55,6 +62,9 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
     const url = req.url.split('?')[0];
     if (url.startsWith('/api/') && !PUBLIC_API.has(url) && !req.user) {
       return reply.code(401).send({ error: 'Not logged in' });
+    }
+    if (req.user && !req.user.isAdmin && adminOnly(req.method, url)) {
+      return reply.code(403).send({ error: 'Only admins can do that' });
     }
   });
 
@@ -80,7 +90,8 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
     const { username, password } = req.body ?? {};
     const problem = validateCredentials(username, password);
     if (problem) return reply.code(400).send({ error: problem });
-    const user = await auth.createUser(username!, password!);
+    // The first account runs the place.
+    const user = await auth.createUser(username!, password!, true);
     startSession(reply, user);
     return { user };
   });
@@ -109,6 +120,8 @@ export async function buildApp(config: Config, db: Db, deps: AppDeps = {}) {
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
   });
+
+  await app.register(userRoutes, { auth });
 
   const sources = new SourceService(db, app.log, deps.fetch);
   const channels = new ChannelService(db);

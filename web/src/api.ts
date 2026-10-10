@@ -1,6 +1,11 @@
 export interface User {
   id: number;
   username: string;
+  isAdmin: boolean;
+}
+
+export interface UserSummary extends User {
+  createdAt: string;
 }
 
 export interface AuthStatus {

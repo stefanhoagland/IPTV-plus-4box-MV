@@ -61,6 +61,11 @@ const migrations: string[] = [
     PRIMARY KEY (user_id, key)
   );
   `,
+  // Viewers vs admins. Everyone who existed before this is an admin (it was a single-admin app).
+  `
+  ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0;
+  UPDATE users SET is_admin = 1;
+  `,
 ];
 
 export type Db = DatabaseSync;
