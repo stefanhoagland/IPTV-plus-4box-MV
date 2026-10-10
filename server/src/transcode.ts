@@ -86,8 +86,10 @@ export class Transcoder {
     const http = ['-user_agent', ch.userAgent];
     const started = Date.now();
     const output = await run(this.ffprobe, ['-v', 'error', ...http, '-protocol_whitelist', 'http,https,tcp,tls,crypto,hls', '-analyzeduration', '5000000', '-probesize', '5000000', '-show_entries', 'stream=codec_type,codec_name,width,height,channels,profile,pix_fmt', '-of', 'json', ch.url], 20_000).catch((err: Error) => {
-      this.proxy.diag.note(channelId, `ffprobe failed after ${secs(started)}: ${err.message}`);
-      throw err;
+      // ffprobe quotes the URL in its errors; keep account credentials out of logs and the UI.
+      const message = err.message.split(ch.url).join(redactUrl(ch.url));
+      this.proxy.diag.note(channelId, `ffprobe failed after ${secs(started)}: ${message}`);
+      throw new Error(message);
     });
     const json = JSON.parse(output) as { streams?: { codec_type: string; codec_name: string; width?: number; height?: number; channels?: number; profile?: string; pix_fmt?: string }[] };
     const streams = json.streams ?? [];
@@ -144,7 +146,7 @@ export class Transcoder {
     let stderr = '';
     child.stderr.on('data', (d) => {
       stderr = (stderr + d).slice(-2000);
-      for (const line of String(d).split('\n').filter((l) => l.trim()).slice(0, 5)) note(`ffmpeg: ${line.trim().slice(0, 300)}`);
+      for (const line of String(d).split('\n').filter((l) => l.trim()).slice(0, 5)) note(`ffmpeg: ${line.split(ch.url).join(redactUrl(ch.url)).trim().slice(0, 300)}`);
     });
     let bytes = 0;
     child.stdout.on('data', (d: Buffer) => {
@@ -161,7 +163,7 @@ export class Transcoder {
     }
     child.on('close', (code, signal) => {
       note(`ffmpeg stopped after ${secs(started)} (${signal ?? `exit ${code}`}), sent ${(bytes / 1e6).toFixed(1)} MB`);
-      if (code && code !== 255 && stderr) req.log.warn(`ffmpeg for channel ${channelId} exited ${code}: ${stderr.trim().split('\n').pop()}`);
+      if (code && code !== 255 && stderr) req.log.warn(`ffmpeg for channel ${channelId} exited ${code}: ${stderr.split(ch.url).join(redactUrl(ch.url)).trim().split('\n').pop()}`);
     });
     // Stop ffmpeg (and the provider connection) as soon as the viewer goes away.
     reply.raw.on('close', () => child.kill('SIGKILL'));

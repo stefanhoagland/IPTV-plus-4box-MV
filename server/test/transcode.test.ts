@@ -65,6 +65,15 @@ test('compat mode turns an MPEG-2 + AC-3 channel into H.264 + AAC', { skip: !has
     assert.ok(diag.events.some((e: string) => e.includes('ffmpeg sending video')), diag.events.join('\n'));
 
     assert.equal((await call('GET', `/api/play/${local.id}/compat`)).statusCode, 400, 'non-http URLs are refused');
+
+    // A provider error must not echo the full stream URL (it can carry account credentials).
+    await call('POST', '/api/sources', { type: 'm3u_file', name: 'G', fileContent: `#EXTINF:-1,Gone\n${url.replace('cable.ts', 'live/user/secretpass/1.ts')}\n` });
+    const gone = (await call('GET', '/api/channels?search=Gone')).json().items[0];
+    server.removeAllListeners('request');
+    server.on('request', (_req, res) => res.writeHead(503).end());
+    const failed = await call('GET', `/api/play/${gone.id}/probe`);
+    assert.equal(failed.statusCode, 502);
+    assert.doesNotMatch(failed.body + JSON.stringify((await call('GET', `/api/play/${gone.id}/diagnostics`)).json()), /secretpass/);
   } finally {
     server.close();
     fs.rmSync(dir, { recursive: true, force: true });
