@@ -23,7 +23,7 @@ test('first run requires setup, then setup logs you in', async () => {
   const setup = await app.inject({ method: 'POST', url: '/api/auth/setup', payload: { username: 'admin', password: 'hunter2hunter2' } });
   assert.equal(setup.statusCode, 200);
   const me = await app.inject({ url: '/api/auth/status', headers: { cookie: cookieFrom(setup) } });
-  assert.deepEqual(me.json(), { setupRequired: false, user: { id: 1, username: 'admin' } });
+  assert.deepEqual(me.json(), { setupRequired: false, user: { id: 1, username: 'admin', isAdmin: true } });
 
   const again = await app.inject({ method: 'POST', url: '/api/auth/setup', payload: { username: 'other', password: 'hunter2hunter2' } });
   assert.equal(again.statusCode, 409);

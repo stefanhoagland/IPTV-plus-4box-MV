@@ -55,6 +55,12 @@ Your four boxes and their audio settings are remembered. All playback goes throu
 
 Some channels use formats browsers can't decode, typically Dolby (AC-3/E-AC-3) audio or MPEG-2/HEVC video, which shows up as a black box. The player detects this (codec errors, sound but no picture, or nothing starting) and switches that box to a **converted** stream: the server runs it through ffmpeg, copying H.264 video when it can and re-encoding otherwise, with stereo AAC audio. Converted boxes show a small *Converted* label, and the app remembers which channels need it. Re-encoding video uses CPU on the server (roughly one core per channel at 720p).
 
+## Users
+
+Everyone who watches can have their own login and their own four boxes. As an admin, open **Admin → Users** and click **Add user**. New users are **viewers**: they can watch and pick channels, but don't see the Admin pages. Tick **Admin** to let someone manage sources, channels and users too. The first account you create, and the `ADMIN_USERNAME` account, are admins.
+
+Each box that's playing uses one stream from your provider, so three people with four boxes each can need up to twelve. If a box says *Channel is offline right now* while the channel works elsewhere, your provider (or Dispatcharr) has probably run out of connections.
+
 ## Live NFL preset
 
 On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public schedule) with the channel each one is on in *your* list:
