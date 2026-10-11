@@ -7,7 +7,9 @@ type Status = { kind: 'loading' } | { kind: 'playing' } | { kind: 'error'; messa
 /** direct: the channel as-is. compat: server fixes the audio and only re-encodes video it knows the
  *  browser can't play. reencode: server always re-encodes the video (pictures that stay black anyway). */
 type Mode = 'direct' | 'compat' | 'reencode';
-const NEXT_MODE: Record<Mode, Mode | null> = { direct: 'compat', compat: 'reencode', reencode: null };
+/** Boxes never switch to server conversion on their own: converting four live channels at once is heavy for the
+ *  server and can make every box stutter. Conversion only happens when someone presses Fix picture. */
+const NEXT_MODE: Record<Mode, Mode | null> = { direct: null, compat: null, reencode: null };
 
 const MAX_AUTO_RETRIES = 2;
 /** Give up on the direct stream if nothing plays within this long. */
@@ -22,29 +24,16 @@ const BACK_BUFFER_S = 30;
 const MAX_RECONNECTS = 5;
 const RECONNECT_WINDOW_MS = 5 * 60_000;
 
-// Channels that needed conversion, so next time they start converted straight away.
-const MODES_KEY = 'iptvmv.channelModes';
-const OLD_COMPAT_KEY = 'iptvmv.compatChannels';
-function rememberedModes(): Record<string, Mode> {
-  try {
-    const modes = JSON.parse(localStorage.getItem(MODES_KEY) ?? '{}') as Record<string, Mode>;
-    for (const id of JSON.parse(localStorage.getItem(OLD_COMPAT_KEY) ?? '[]') as number[]) modes[id] ??= 'compat';
-    return modes;
-  } catch {
-    return {};
-  }
+// Converted channels used to be remembered per browser. Forget them so every box starts unconverted.
+try {
+  localStorage.removeItem('iptvmv.channelModes');
+  localStorage.removeItem('iptvmv.compatChannels');
+} catch {
+  /* storage unavailable */
 }
-const rememberedMode = (id: number): Mode => rememberedModes()[id] ?? 'direct';
-function rememberMode(id: number, mode: Mode) {
-  try {
-    const modes = rememberedModes();
-    delete modes[id];
-    if (mode !== 'direct') modes[id] = mode;
-    localStorage.setItem(MODES_KEY, JSON.stringify(Object.fromEntries(Object.entries(modes).slice(-500))));
-    localStorage.removeItem(OLD_COMPAT_KEY);
-  } catch {
-    /* storage unavailable: fine, we'll just detect it again */
-  }
+const rememberedMode = (_id: number): Mode => 'direct';
+function rememberMode(_id: number, _mode: Mode) {
+  /* Fix picture lasts until the box changes channel or the page reloads. */
 }
 
 async function describeStream(channelId: number): Promise<string | null> {
@@ -186,7 +175,7 @@ export default function Player({
     /** Codec or decode problems: retrying the same way won't help, converting might. */
     const undecodable = (message: string) => {
       if (disposed || stepUp()) return;
-      showError(message);
+      showError(mode === 'direct' ? `${message}. Fix picture can convert it` : message);
     };
 
     // Count pictures actually put on screen. A playing video with none is a black box.
