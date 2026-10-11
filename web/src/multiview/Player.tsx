@@ -218,12 +218,16 @@ export default function Player({
     let live = false;
     let lastTime = 0;
     let lastAdvance = Date.now();
+    let lastFrames = 0;
     const watchdog = setInterval(() => {
       if (disposed || !live || video.paused || !onScreen()) return void (lastAdvance = Date.now());
       const t = video.currentTime;
       if (t < lastTime - 1) return reconnect(`playback jumped back from ${lastTime.toFixed(1)} to ${t.toFixed(1)}s`);
-      if (t > lastTime) {
+      // Time moving with no new pictures is a frozen picture too (the sound may still be playing).
+      const newPictures = !rvfc || video.videoWidth === 0 || shownFrames !== lastFrames;
+      if (t > lastTime && newPictures) {
         lastTime = t;
+        lastFrames = shownFrames;
         lastAdvance = Date.now();
       } else if (Date.now() - lastAdvance > STALL_MS) {
         reconnect(`picture frozen at ${t.toFixed(1)}s for ${STALL_MS / 1000}s`);
@@ -236,6 +240,7 @@ export default function Player({
       live = true;
       lastTime = video.currentTime;
       lastAdvance = Date.now();
+      lastFrames = shownFrames;
       autoRetries = 0;
       if (startTimer) clearTimeout(startTimer);
       setStatus({ kind: 'playing' });
