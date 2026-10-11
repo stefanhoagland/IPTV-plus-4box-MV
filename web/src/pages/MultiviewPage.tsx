@@ -44,16 +44,30 @@ export default function MultiviewPage() {
     [save],
   );
 
-  // Keys 1-4 toggle each box's audio.
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [allFullscreen, setAllFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setAllFullscreen(document.fullscreenElement === pageRef.current && pageRef.current !== null);
+    document.addEventListener('fullscreenchange', onChange);
+    return () => document.removeEventListener('fullscreenchange', onChange);
+  }, []);
+  /** All four boxes fill the screen. The whole page goes fullscreen so the channel picker still shows on top. */
+  const toggleAllFullscreen = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void pageRef.current?.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  // Keys 1-4 toggle each box's audio; F toggles fullscreen for all four.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (picking !== null || sport || e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === 'f' || e.key === 'F') return toggleAllFullscreen();
       const n = Number(e.key);
       if (n >= 1 && n <= 4 && tiles[n - 1].channelId !== null) update(n - 1, { muted: !tiles[n - 1].muted });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [tiles, picking, sport, update]);
+  }, [tiles, picking, sport, update, toggleAllFullscreen]);
 
   const fullscreen = (i: number) => {
     const el = tileRefs.current[i];
@@ -63,10 +77,18 @@ export default function MultiviewPage() {
   };
 
   return (
-    <div className="multiview">
+    <div className={`multiview${allFullscreen ? ' all-fullscreen' : ''}`} ref={pageRef}>
+      {allFullscreen && (
+        <button className="mv-exit-fullscreen" onClick={toggleAllFullscreen} title="Exit fullscreen (Esc or F)">
+          <Close /> Exit fullscreen
+        </button>
+      )}
       <div className="mv-toolbar">
         <span className="muted small">Click a box to choose its channel</span>
         <div className="mv-actions">
+          <button className="ghost small-btn" onClick={toggleAllFullscreen} title="All four boxes fullscreen (F)">
+            ⛶ Fullscreen
+          </button>
           <button className="ghost small-btn" onClick={() => setTv(true)}>
             📺 Watch on TV
           </button>
