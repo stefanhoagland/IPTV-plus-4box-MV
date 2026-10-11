@@ -190,6 +190,12 @@ input.switch:checked::after { transform: translateX(0.95rem); }
 }
 .tile-btn.audio.on { background: var(--accent); color: #04121c; border-color: var(--accent); }
 .tile:fullscreen { border: 0; box-shadow: none; }
+.multiview.all-fullscreen { background: #000; }
+.multiview.all-fullscreen .mv-toolbar { display: none; }
+.multiview.all-fullscreen .grid-2x2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; height: auto; min-height: 0; }
+.mv-exit-fullscreen { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; display: flex; align-items: center; gap: 0.4rem; background: rgba(0, 0, 0, 0.7); color: var(--text); border: 1px solid #ffffff33; opacity: 0; transition: opacity 0.2s; }
+.multiview.all-fullscreen:hover .mv-exit-fullscreen, .mv-exit-fullscreen:focus-visible { opacity: 1; }
+@media (hover: none) { .mv-exit-fullscreen { opacity: 0.8; } }
 
 .picker { display: flex; flex-direction: column; gap: 0.5rem; }
 .picker .filters { margin: 0; }
