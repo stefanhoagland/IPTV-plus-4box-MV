@@ -14,6 +14,13 @@ const MAX_AUTO_RETRIES = 2;
 const START_TIMEOUT_MS = 20_000;
 /** After "playing", wait this long for pictures on screen before calling the video undecodable. */
 const FRAME_CHECK_MS = 4_000;
+/** A playing stream whose time stands still this long has frozen: reconnect it. */
+const STALL_MS = 12_000;
+/** Seconds of already-played video kept in memory. Without a limit, hours of four streams fill the browser's buffer and playback freezes. */
+const BACK_BUFFER_S = 30;
+/** More reconnects than this within RECONNECT_WINDOW_MS means the channel keeps dropping: show an error instead. */
+const MAX_RECONNECTS = 5;
+const RECONNECT_WINDOW_MS = 5 * 60_000;
 
 // Channels that needed conversion, so next time they start converted straight away.
 const MODES_KEY = 'iptvmv.channelModes';
@@ -117,6 +124,7 @@ export default function Player({
     let disposed = false;
     let autoRetries = 0;
     let mediaRecoveries = 0;
+    let reconnects: number[] = [];
     const timers = new Set<ReturnType<typeof setTimeout>>();
     const later = (fn: () => void, ms: number) => {
       const t = setTimeout(() => {
@@ -163,6 +171,18 @@ export default function Player({
       showError(message);
     };
 
+    /** A stream that played and then froze, ended or jumped back: start it again from the live edge. */
+    const reconnect = (why: string) => {
+      if (disposed) return;
+      const now = Date.now();
+      reconnects = reconnects.filter((t) => now - t < RECONNECT_WINDOW_MS);
+      if (reconnects.length >= MAX_RECONNECTS) return showError('This channel keeps dropping out');
+      reconnects.push(now);
+      say(`${why}: reconnecting`);
+      clearTimers();
+      later(start, 500);
+    };
+
     /** Codec or decode problems: retrying the same way won't help, converting might. */
     const undecodable = (message: string) => {
       if (disposed || stepUp()) return;
@@ -194,9 +214,28 @@ export default function Player({
       say(`no picture after ${FRAME_CHECK_MS / 1000}s (time ${since.toFixed(1)} -> ${video.currentTime.toFixed(1)}, size ${video.videoWidth}x${video.videoHeight})`);
       undecodable('No picture in this stream');
     };
+    // Watchdog for long viewing: a picture stuck on one frame, or playback jumping back (looping), gets a fresh connection.
+    let live = false;
+    let lastTime = 0;
+    let lastAdvance = Date.now();
+    const watchdog = setInterval(() => {
+      if (disposed || !live || video.paused || !onScreen()) return void (lastAdvance = Date.now());
+      const t = video.currentTime;
+      if (t < lastTime - 1) return reconnect(`playback jumped back from ${lastTime.toFixed(1)} to ${t.toFixed(1)}s`);
+      if (t > lastTime) {
+        lastTime = t;
+        lastAdvance = Date.now();
+      } else if (Date.now() - lastAdvance > STALL_MS) {
+        reconnect(`picture frozen at ${t.toFixed(1)}s for ${STALL_MS / 1000}s`);
+      }
+    }, 2000);
+
     const onPlaying = () => {
       if (disposed) return;
       say(`playing (${video.videoWidth}x${video.videoHeight})`);
+      live = true;
+      lastTime = video.currentTime;
+      lastAdvance = Date.now();
       autoRetries = 0;
       if (startTimer) clearTimeout(startTimer);
       setStatus({ kind: 'playing' });
@@ -227,7 +266,13 @@ export default function Player({
       const mpegts = (await import('mpegts.js')).default;
       if (disposed) return;
       if (!mpegts.isSupported()) return fail('This browser cannot play this stream');
-      ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url }, { enableStashBuffer: false, liveBufferLatencyChasing: true });
+      ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url }, {
+        enableStashBuffer: false,
+        liveBufferLatencyChasing: true,
+        autoCleanupSourceBuffer: true,
+        autoCleanupMaxBackwardDuration: BACK_BUFFER_S * 2,
+        autoCleanupMinBackwardDuration: BACK_BUFFER_S,
+      });
       say(`MPEG-TS player loading ${url}`);
       ts.on(mpegts.Events.MEDIA_INFO, (info: { mimeType?: string; videoCodec?: string; audioCodec?: string; width?: number; height?: number }) => {
         say(`stream info: video ${info.videoCodec ?? 'none'} ${info.width ?? '?'}x${info.height ?? '?'}, audio ${info.audioCodec ?? 'none'}`);
@@ -241,12 +286,19 @@ export default function Player({
         if (type === mpegts.ErrorTypes.MEDIA_ERROR) return undecodable(`This stream can't be decoded (${detail})`);
         fail(mode === 'direct' ? `Stream error (${detail})` : 'Could not convert this stream');
       });
+      // The server or provider closed a live stream: what's buffered plays out, then the picture would freeze.
+      ts.on(mpegts.Events.LOADING_COMPLETE, () => {
+        const left = video.buffered.length ? video.buffered.end(video.buffered.length - 1) - video.currentTime : 0;
+        say(`stream ended with ${left.toFixed(1)}s left to play`);
+        later(() => reconnect('stream ended'), Math.max(0, left * 1000 - 500));
+      });
       ts.attachMediaElement(video);
       ts.load();
       play();
     }
 
     function start() {
+      live = false;
       hls?.destroy();
       hls = null;
       ts?.destroy();
@@ -262,7 +314,7 @@ export default function Player({
       if (mode !== 'direct') return void startMpegts(`${src}/compat${mode === 'reencode' ? '?reencode=1' : ''}`);
 
       if (Hls.isSupported()) {
-        hls = new Hls({ lowLatencyMode: false, liveSyncDurationCount: 3, manifestLoadingMaxRetry: 0, levelLoadingMaxRetry: 4, fragLoadingMaxRetry: 4 });
+        hls = new Hls({ lowLatencyMode: false, liveSyncDurationCount: 3, manifestLoadingMaxRetry: 0, levelLoadingMaxRetry: 4, fragLoadingMaxRetry: 4, backBufferLength: BACK_BUFFER_S });
         hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) =>
           say(`HLS playlist: ${data.levels.map((l) => [l.width && `${l.width}x${l.height}`, l.videoCodec, l.audioCodec].filter(Boolean).join(' ') || 'level').join('; ')}`),
         );
@@ -306,6 +358,7 @@ export default function Player({
     return () => {
       disposed = true;
       clearTimers();
+      clearInterval(watchdog);
       if (rvfcHandle !== undefined) video.cancelVideoFrameCallback(rvfcHandle);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('waiting', onWaiting);
