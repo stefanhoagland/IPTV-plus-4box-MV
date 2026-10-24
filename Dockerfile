@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:22-bookworm-slim AS build
+FROM mirror.gcr.io/library/node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY server/package.json server/
@@ -7,7 +7,7 @@ RUN npm ci
 COPY . .
 RUN npm run build && npm prune --omit=dev
 
-FROM public.ecr.aws/docker/library/node:22-bookworm-slim
+FROM mirror.gcr.io/library/node:22-bookworm-slim
 # ffmpeg converts channels the browser can't decode (Dolby audio, MPEG-2/HEVC video).
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ffmpeg \
