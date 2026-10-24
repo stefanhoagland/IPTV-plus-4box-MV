@@ -4,7 +4,7 @@ import Player from '../multiview/Player';
 import WatchOnTv from '../multiview/WatchOnTv';
 import ChannelPicker from '../multiview/ChannelPicker';
 import SportsPreset, { type League } from '../multiview/SportsPreset';
-import { Close, FixPicture, Info, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
+import { Captions, Close, FixPicture, Info, Fullscreen, Plus, SpeakerOff, SpeakerOn } from '../multiview/icons';
 
 interface Tile {
   channelId: number | null;
@@ -14,6 +14,17 @@ interface Tile {
 
 const EMPTY: Tile[] = Array.from({ length: 4 }, () => ({ channelId: null, muted: true, channel: null }));
 
+/** Which boxes show captions, remembered in this browser. */
+const CAPTIONS_KEY = 'iptvmv.captions';
+function loadCaptions(): boolean[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CAPTIONS_KEY) ?? '[]') as boolean[];
+    return [0, 1, 2, 3].map((i) => saved[i] === true);
+  } catch {
+    return [false, false, false, false];
+  }
+}
+
 export default function MultiviewPage() {
   const [tiles, setTiles] = useState<Tile[]>(EMPTY);
   const [picking, setPicking] = useState<number | null>(null);
@@ -22,6 +33,17 @@ export default function MultiviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [fixRequests, setFixRequests] = useState([0, 0, 0, 0]);
   const [detailsRequests, setDetailsRequests] = useState([0, 0, 0, 0]);
+  const [captions, setCaptions] = useState(loadCaptions);
+  const toggleCaptions = (i: number) =>
+    setCaptions((c) => {
+      const next = c.map((on, j) => (j === i ? !on : on));
+      try {
+        localStorage.setItem(CAPTIONS_KEY, JSON.stringify(next));
+      } catch {
+        /* storage unavailable: captions just won't be remembered */
+      }
+      return next;
+    });
   const tileRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -124,7 +146,7 @@ export default function MultiviewPage() {
           >
             {t.channelId !== null && t.channel ? (
               <>
-                <Player channelId={t.channelId} muted={t.muted} fixRequest={fixRequests[i]} detailsRequest={detailsRequests[i]} />
+                <Player channelId={t.channelId} muted={t.muted} fixRequest={fixRequests[i]} detailsRequest={detailsRequests[i]} captions={captions[i]} />
                 <div className="tile-bar" onClick={(e) => e.stopPropagation()}>
                   <div className="tile-title">
                     <span className="box-num">{i + 1}</span>
@@ -140,6 +162,15 @@ export default function MultiviewPage() {
                       title={t.muted ? `Audio off (press ${i + 1})` : `Audio on (press ${i + 1})`}
                     >
                       {t.muted ? <SpeakerOff /> : <SpeakerOn />}
+                    </button>
+                    <button
+                      className={`tile-btn${captions[i] ? ' on' : ''}`}
+                      onClick={() => toggleCaptions(i)}
+                      aria-pressed={captions[i]}
+                      aria-label={captions[i] ? `Turn off captions for box ${i + 1}` : `Turn on captions for box ${i + 1}`}
+                      title={captions[i] ? 'Captions on' : 'Captions (CC)'}
+                    >
+                      <Captions />
                     </button>
                     <button
                       className="tile-btn"
