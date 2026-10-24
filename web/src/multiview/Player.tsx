@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Hls from 'hls.js';
 import Modal from '../components/Modal';
 import type Mpegts from 'mpegts.js';
+import type { CaptionDecoder } from './captions';
 
 type Status = { kind: 'loading' } | { kind: 'playing' } | { kind: 'error'; message: string };
 /** direct: the channel as-is. compat: server fixes the audio and only re-encodes video it knows the
@@ -78,11 +79,14 @@ export default function Player({
   muted,
   fixRequest = 0,
   detailsRequest = 0,
+  captions = false,
 }: {
   channelId: number;
   muted: boolean;
   fixRequest?: number;
   detailsRequest?: number;
+  /** Show closed captions (CC1). */
+  captions?: boolean;
 }) {
   const { log, say } = useEventLog();
   const [details, setDetails] = useState<string | null>(null);
@@ -91,6 +95,13 @@ export default function Player({
   const [mode, setMode] = useState<Mode>(() => rememberedMode(channelId));
   const [attempt, setAttempt] = useState(0);
   const [soundBlocked, setSoundBlocked] = useState(false);
+  const captionsOn = useRef(captions);
+  captionsOn.current = captions;
+  /** Reads captions out of a raw MPEG-TS stream; HLS streams use the browser's own caption tracks instead. */
+  const captionDecoder = useRef<CaptionDecoder | null>(null);
+  const engine = useRef<'hls' | 'mpegts' | 'native'>('native');
+  const [captionText, setCaptionText] = useState('');
+  const [noCaptions, setNoCaptions] = useState(false);
 
   useEffect(() => setMode(rememberedMode(channelId)), [channelId]);
 
@@ -257,10 +268,17 @@ export default function Player({
       });
 
     async function startMpegts(url: string) {
-      const mpegts = (await import('mpegts.js')).default;
+      const [mpegts, { CaptionDecoder: Decoder, teeLoader }] = await Promise.all([import('mpegts.js').then((m) => m.default), import('./captions')]);
       if (disposed) return;
       if (!mpegts.isSupported()) return fail('This browser cannot play this stream');
+      engine.current = 'mpegts';
+      captionDecoder.current = null;
+      const onChunk = (chunk: Uint8Array) => {
+        if (!captionsOn.current) return void (captionDecoder.current = null);
+        (captionDecoder.current ??= new Decoder(video)).push(chunk);
+      };
       ts = mpegts.createPlayer({ type: 'mpegts', isLive: true, url }, {
+        customLoader: teeLoader(mpegts, onChunk),
         enableStashBuffer: false,
         liveBufferLatencyChasing: true,
         autoCleanupSourceBuffer: true,
@@ -308,6 +326,7 @@ export default function Player({
       if (mode !== 'direct') return void startMpegts(`${src}/compat${mode === 'reencode' ? '?reencode=1' : ''}`);
 
       if (Hls.isSupported()) {
+        engine.current = 'hls';
         hls = new Hls({ lowLatencyMode: false, liveSyncDurationCount: 3, manifestLoadingMaxRetry: 0, levelLoadingMaxRetry: 4, fragLoadingMaxRetry: 4, backBufferLength: BACK_BUFFER_S });
         hls.on(Hls.Events.MANIFEST_PARSED, (_e, data) =>
           say(`HLS playlist: ${data.levels.map((l) => [l.width && `${l.width}x${l.height}`, l.videoCodec, l.audioCodec].filter(Boolean).join(' ') || 'level').join('; ')}`),
@@ -340,6 +359,7 @@ export default function Player({
         hls.loadSource(`${src}?as=hls`);
         hls.attachMedia(video);
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        engine.current = 'native';
         video.src = src;
         video.onerror = () => fail('Stream unavailable');
         play();
@@ -394,6 +414,33 @@ export default function Player({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detailsRequest]);
 
+  // Captions: draw the decoded text for raw MPEG-TS, or switch on the browser's caption track for HLS.
+  useEffect(() => {
+    const video = videoRef.current!;
+    const tracks = () => Array.from(video.textTracks).filter((t) => t.kind === 'captions' || t.kind === 'subtitles');
+    if (!captions) {
+      captionDecoder.current = null;
+      tracks().forEach((t) => (t.mode = 'hidden'));
+      setCaptionText('');
+      setNoCaptions(false);
+      return;
+    }
+    const since = Date.now();
+    const tick = setInterval(() => {
+      let found: boolean;
+      if (engine.current === 'mpegts') {
+        setCaptionText(captionDecoder.current?.current() ?? '');
+        found = captionDecoder.current?.found ?? false;
+      } else {
+        tracks().forEach((t) => (t.mode = 'showing'));
+        found = tracks().length > 0;
+      }
+      const waited = Date.now() - since;
+      setNoCaptions(!found && waited > 12_000 && waited < 18_000);
+    }, 250);
+    return () => clearInterval(tick);
+  }, [captions]);
+
   useEffect(() => {
     if (videoRef.current) videoRef.current.muted = muted;
     if (muted) setSoundBlocked(false);
@@ -423,6 +470,11 @@ export default function Player({
         </div>
       )}
       <video ref={videoRef} className="player-video" muted={muted} playsInline autoPlay />
+      {captions && (captionText || noCaptions) && (
+        <div className={`captions${noCaptions ? ' hint' : ''}`} aria-live="off">
+          {noCaptions ? 'No captions on this channel' : captionText}
+        </div>
+      )}
       {mode !== 'direct' && status.kind === 'playing' && (
         <span className="compat-badge" title="Your browser can't play this channel's format directly, so the server is converting it">
           Converted

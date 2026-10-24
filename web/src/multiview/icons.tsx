@@ -46,3 +46,10 @@ export const Info = () => (
     <path d="M12 16v-4M12 8h.01" />
   </svg>
 );
+
+export const Captions = () => (
+  <svg {...base} aria-hidden="true">
+    <rect x="2" y="5" width="20" height="14" rx="2" />
+    <path d="M10 10.5a2.5 2.5 0 1 0 0 3M17 10.5a2.5 2.5 0 1 0 0 3" />
+  </svg>
+);
