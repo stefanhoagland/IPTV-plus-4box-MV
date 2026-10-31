@@ -25,11 +25,12 @@ function kickoff(iso: string) {
   return Number.isNaN(d.getTime()) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-export type League = 'nfl' | 'ncaab';
+export type League = 'nfl' | 'ncaab' | 'ncaaf';
 
 const LEAGUES: Record<League, { title: string; name: string; example: string; networks: string }> = {
   nfl: { title: 'Live NFL', name: 'NFL', example: 'NFL 01: Bears vs Packers', networks: 'CBS, FOX, NBC, ESPN…' },
   ncaab: { title: 'College Basketball', name: 'college basketball', example: 'NCAAB 01: Duke vs North Carolina', networks: 'ESPN, ESPNU, CBS Sports Network, FS1, Big Ten Network…' },
+  ncaaf: { title: 'College Football', name: 'college football', example: 'NCAAF 01: Ohio State vs Michigan', networks: 'ABC, CBS, FOX, ESPN, SEC Network, Big Ten Network…' },
 };
 
 export default function SportsPreset({

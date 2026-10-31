@@ -163,3 +163,28 @@ test('regional and other stations are found by name', async () => {
   assert.equal(byId['23'].channel.name, 'US: Marquee Sports Network');
   assert.equal(byId['24'].channel, null);
 });
+
+test('college football preset matches schools by name and networks', async () => {
+  const school = (name: string, location: string, abbreviation: string) => ({ name, location, displayName: `${location} ${name}`, shortDisplayName: location, abbreviation });
+  const games = {
+    events: [
+      event('21', school('Buckeyes', 'Ohio State', 'OSU'), school('Wolverines', 'Michigan', 'MICH'), 'in', ['FOX']),
+      event('22', school('Crimson Tide', 'Alabama', 'ALA'), school('Tigers', 'Auburn', 'AUB'), 'in', ['SECN']),
+    ],
+  };
+  const list = [
+    '#EXTM3U',
+    '#EXTINF:-1,NCAAF 01: Ohio State vs Michigan',
+    'http://x/ev1.m3u8',
+    '#EXTINF:-1,US: SEC Network',
+    'http://x/secn.m3u8',
+  ].join('\n');
+  const { fn } = fakeFetch({ 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard': games });
+  const { call } = await loggedInApp({ fetch: fn });
+  await call('POST', '/api/sources', { type: 'm3u_file', name: 'P', fileContent: list });
+  const res = await call('GET', '/api/presets/ncaaf');
+  assert.equal(res.statusCode, 200, res.body);
+  const byId = Object.fromEntries(res.json().games.map((g: { id: string; channel: { name: string } | null }) => [g.id, g]));
+  assert.equal(byId['21'].channel.name, 'NCAAF 01: Ohio State vs Michigan');
+  assert.equal(byId['22'].channel.name, 'US: SEC Network');
+});

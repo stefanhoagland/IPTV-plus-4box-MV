@@ -78,6 +78,8 @@ On the Multiview page, **🏈 Live NFL** lists today's games (from ESPN's public
 
 **🏀 College Hoops** does the same for Division I men's college basketball. Event channels are matched by school (`NCAAB 01: Duke vs North Carolina`), then by network: ESPN, ESPN2, ESPNU, ESPNews, CBS, CBS Sports Network, FOX, FS1, FS2, ABC, NBC, TNT, TBS, truTV, USA Network, ACC Network, SEC Network, Big Ten Network and Pac-12. Regional networks need the right region (`FDSN Ohio` → *FanDuel Sports Ohio* or *Bally Sports Ohio*), and any other station ESPN lists (NESN, MSG, YES, Marquee, a local station…) is matched by name. Games that only stream on ESPN+ or Peacock show up without a channel unless your list has one for that service.
 
+**🏟️ College Football** works the same way for FBS college football (`NCAAF 01: Ohio State vs Michigan`, then the network: ABC, CBS, FOX, NBC, ESPN, SEC Network, Big Ten Network and the rest of the list above).
+
 ## Configuration
 
 | Variable | Default | Purpose |
