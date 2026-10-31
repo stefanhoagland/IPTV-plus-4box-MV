@@ -5,7 +5,7 @@ import type { SourceService } from '../sources.js';
 /** Providers rename their event channels ("NFL 01: …") on game day, so stale playlists are re-pulled first. */
 const MAX_PLAYLIST_AGE_HOURS = 3;
 
-/** GET /api/presets/nfl, /api/presets/ncaab: today's games matched to channels. */
+/** GET /api/presets/nfl, /api/presets/ncaab, /api/presets/ncaaf: today's games matched to channels. */
 export async function sportsRoutes(app: FastifyInstance, opts: { leagues: Record<string, ScoreboardService>; sources: SourceService }) {
   app.get('/api/presets/:league', async (req: FastifyRequest<{ Params: { league: string } }>, reply) => {
     const service = opts.leagues[req.params.league];

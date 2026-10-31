@@ -2,7 +2,7 @@ import type { Db } from './db.js';
 import type { ChannelService, ChannelView } from './channels.js';
 
 /**
- * Sports presets ("Live NFL", "College Basketball"): today's games come from ESPN's public
+ * Sports presets ("Live NFL", "College Basketball", "College Football"): today's games come from ESPN's public
  * scoreboard, then each game is matched to a channel in the user's own list, first by team names
  * (event channels such as "NFL 03: Bears vs Packers"), then by the network carrying it (CBS, ESPN, ...).
  */
@@ -28,6 +28,14 @@ export const LEAGUES: Record<string, League> = {
     // groups=50 is all of Division I; without it ESPN only lists featured games.
     url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50&limit=400',
     urlEnv: 'NCAAB_SCOREBOARD_URL',
+    matchLocation: true,
+  },
+  ncaaf: {
+    key: 'ncaaf',
+    label: 'college football',
+    // groups=80 is all of FBS; without it ESPN only lists featured games.
+    url: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80&limit=400',
+    urlEnv: 'NCAAF_SCOREBOARD_URL',
     matchLocation: true,
   },
 };

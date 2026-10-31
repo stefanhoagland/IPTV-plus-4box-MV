@@ -120,6 +120,9 @@ export default function MultiviewPage() {
           <button className="ghost small-btn" onClick={() => setSport('ncaab')}>
             🏀 College Hoops
           </button>
+          <button className="ghost small-btn" onClick={() => setSport('ncaaf')}>
+            🏟️ College Football
+          </button>
         </div>
       </div>
       {error && (
